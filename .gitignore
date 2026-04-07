@@ -5,4 +5,5 @@
 venv/
 __pycache__/
 *.py[cod]
+.llm_judge_cache.json
 .DS_Store
