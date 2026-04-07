@@ -6,6 +6,8 @@ colorTo: blue
 sdk: docker
 app_port: 7860
 pinned: false
+license: mit
+short_description: Crisis communication OpenEnv environment
 ---
 
 # Crisis Communication Environment
