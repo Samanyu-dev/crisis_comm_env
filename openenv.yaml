@@ -1,0 +1,24 @@
+name: crisis-command
+version: 0.1.0
+description: Crisis communication environment with graded multi-audience response tasks.
+runtime:
+  type: python
+  working_dir: server
+server:
+  entrypoint:
+    command: uvicorn
+    args:
+      - app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+interfaces:
+  type: http
+  health: /health
+  reset: /reset
+  step: /step
+  state: /state
+metadata:
+  default_task: data-breach
+  task_count: 3

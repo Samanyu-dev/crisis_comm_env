@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Callable
 
 from crisis_data import SCENARIOS, TASK_NAMES
@@ -7,7 +9,12 @@ from grader import CrisisGrader, build_mock_actions
 from llm_judge import LLMJudge
 from models import CrisisAction, CrisisReward, RewardBreakdown, StakeholderMessage
 from environment import CrisisCommunicationEnv
+from app import create_app
 from state_manager import CrisisStateManager
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 
 CheckFn = Callable[[], list[str]]
@@ -25,14 +32,21 @@ def check_phase_1_data() -> list[str]:
     }
     errors: list[str] = []
     errors += _assert(TASK_NAMES == list(expected.keys()), f"Unexpected task order: {TASK_NAMES}")
+    print("=== PHASE 1 DATA ===")
     for name, spec in expected.items():
         scenario = SCENARIOS[name]
+        print(
+            f"{name}: difficulty={scenario.difficulty}, max_turns={scenario.max_turns}, "
+            f"true_facts={len(scenario.ground_truth_facts)}, false_facts={len(scenario.false_facts)}, "
+            f"events={len(scenario.turn_events)}"
+        )
         errors += _assert(scenario.difficulty == spec["difficulty"], f"{name}: difficulty mismatch")
         errors += _assert(scenario.max_turns == spec["max_turns"], f"{name}: max_turns mismatch")
         errors += _assert(len(scenario.ground_truth_facts) == spec["true_facts"], f"{name}: true fact count mismatch")
         errors += _assert(len(scenario.false_facts) == spec["false_facts"], f"{name}: false fact count mismatch")
         errors += _assert(len(scenario.turn_events) == spec["events"], f"{name}: event count mismatch")
         errors += _assert(set(scenario.audiences.keys()) == {"employees", "customers", "regulators", "press"}, f"{name}: audience set mismatch")
+    print()
     return errors
 
 
@@ -57,6 +71,12 @@ def check_phase_1_models() -> list[str]:
         total=0.74,
     )
     reward = CrisisReward(score=0.74, done=False, breakdown=breakdown)
+    print("=== PHASE 1 MODELS ===")
+    print("StakeholderMessage:", msg)
+    print("CrisisAction messages:", len(action.messages))
+    print("RewardBreakdown total:", reward.breakdown.total)
+    print("CrisisReward score:", reward.score)
+    print()
     errors += _assert(msg.audience == "employees", "StakeholderMessage validation failed")
     errors += _assert(len(action.messages) == 2, "CrisisAction message validation failed")
     errors += _assert(reward.breakdown.total == 0.74, "RewardBreakdown total mismatch")
@@ -68,12 +88,17 @@ def check_phase_2_variance() -> list[str]:
     grader = CrisisGrader()
     fixtures = build_mock_actions()
     turns = {"data-breach": 3, "product-recall": 3, "executive-fraud": 2}
+    print("=== PHASE 2 VARIANCE ===")
     for scenario_name, variants in fixtures.items():
         scores: dict[str, float] = {}
+        print(f"--- {scenario_name} ---")
         for label, action in variants.items():
             reward = grader.grade_step(scenario_name, action, turn=turns[scenario_name])
             scores[label] = reward.score
+            print(f"  {label:6s}: {reward.score:.4f}")
         spread = max(scores.values()) - min(scores.values())
+        print(f"  spread : {spread:.4f}")
+        print()
         errors += _assert(scores["bad"] < 0.3, f"{scenario_name}: bad score too high ({scores['bad']:.4f})")
         errors += _assert(scores["good"] > 0.7, f"{scenario_name}: good score too low ({scores['good']:.4f})")
         errors += _assert(spread > 0.5, f"{scenario_name}: score spread too small ({spread:.4f})")
@@ -84,6 +109,18 @@ def check_phase_2_breakdown() -> list[str]:
     grader = CrisisGrader()
     reward = grader.grade_step("data-breach", build_mock_actions()["data-breach"]["good"], turn=3)
     errors: list[str] = []
+    print("=== PHASE 2 BREAKDOWN ===")
+    print(f"score               : {reward.score:.4f}")
+    print(f"factual_accuracy    : {reward.breakdown.factual_accuracy:.4f}")
+    print(f"audience_alignment  : {reward.breakdown.audience_alignment:.4f}")
+    print(f"timeliness          : {reward.breakdown.timeliness:.4f}")
+    print(f"consistency         : {reward.breakdown.consistency:.4f}")
+    print(f"legal_safety        : {reward.breakdown.legal_safety:.4f}")
+    print(f"proactive_disclosure: {reward.breakdown.proactive_disclosure:.4f}")
+    print(f"exploit_penalty     : {reward.breakdown.exploit_penalty:.4f}")
+    print(f"false_fact_hits     : {reward.info['false_fact_hits']}")
+    print(f"notes               : {reward.breakdown.notes}")
+    print()
     errors += _assert(reward.score > 0.75, f"data-breach good score unexpectedly low ({reward.score:.4f})")
     errors += _assert(
         "full credit card numbers were exposed" not in reward.info["false_fact_hits"],
@@ -142,6 +179,15 @@ def check_phase_2_exploits() -> list[str]:
         },
         turn=2,
     )
+    print("=== PHASE 2 EXPLOITS ===")
+    print(
+        f"copy_paste score={copy_reward.score:.4f}, penalty={copy_reward.breakdown.exploit_penalty:.4f}"
+    )
+    print(
+        f"false_fact score={false_fact_reward.score:.4f}, penalty={false_fact_reward.breakdown.exploit_penalty:.4f}"
+    )
+    print(f"hedging score={hedge_reward.score:.4f}")
+    print()
     errors += _assert(hedge_reward.score <= 0.1, f"Hedging cap failed ({hedge_reward.score:.4f})")
     return errors
 
@@ -160,6 +206,9 @@ def check_phase_2_judge() -> list[str]:
         forbidden_phrases=["we think", "no comment"],
     )
     errors: list[str] = []
+    print("=== PHASE 2 JUDGE ===")
+    print(result)
+    print()
     errors += _assert(result["source"] == "heuristic", "LLM judge fallback did not stay deterministic")
     errors += _assert(result["audience_fit"] >= 0.7, "LLM judge audience_fit unexpectedly low")
     errors += _assert(not result["keyword_stuffing"], "LLM judge falsely flagged keyword stuffing")
@@ -179,6 +228,13 @@ def check_phase_3_state_manager() -> list[str]:
         }
     )
     errors: list[str] = []
+    print("=== PHASE 3 STATE MANAGER ===")
+    print("initial_turn:", observation.turn)
+    print("next_turn   :", next_observation.turn)
+    print("reward      :", reward.score)
+    print("done        :", done)
+    print("snapshot    :", info["state_snapshot"])
+    print()
     errors += _assert(observation.turn == 1, f"Initial observation turn mismatch ({observation.turn})")
     errors += _assert(any(event.event_type == "stakeholder_pressure" for event in observation.events) is False, "Unexpected turn-1 pressure event")
     errors += _assert(next_observation.turn == 2, f"Next observation turn mismatch ({next_observation.turn})")
@@ -203,6 +259,13 @@ def check_phase_3_environment() -> list[str]:
     )
     state = env.state()
     errors: list[str] = []
+    print("=== PHASE 3 ENVIRONMENT ===")
+    print("reset task :", observation.task_name)
+    print("next turn  :", next_observation.turn)
+    print("reward     :", reward)
+    print("done       :", done)
+    print("state      :", state)
+    print()
     errors += _assert(observation.task_name == "product-recall", f"Environment reset loaded wrong task ({observation.task_name})")
     errors += _assert(next_observation.turn == 2, f"Environment did not advance turn correctly ({next_observation.turn})")
     errors += _assert(isinstance(reward, float), "Environment step did not return a scalar reward")
@@ -211,6 +274,91 @@ def check_phase_3_environment() -> list[str]:
     errors += _assert(state["scenario_name"] == "product-recall", "Environment state snapshot has wrong scenario")
     errors += _assert("task_summary" in state, "Environment state() is missing serializable task metadata")
     errors += _assert("product-recall" in env.task_names(), "Environment task_names() missing expected task")
+    return errors
+
+
+def check_phase_4_app() -> list[str]:
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app())
+    health = client.get("/health")
+    tasks = client.get("/tasks")
+    reset = client.post("/reset", json={"task_name": "data-breach"})
+    step = client.post(
+        "/step",
+        json={
+            "messages": {
+                "regulators": "We formally acknowledge a GDPR Article 33 breach involving 50,000 records.",
+                "employees": "A contained security incident affected customer data.",
+            },
+            "internal_notes": "Regulator first.",
+        },
+    )
+    state = client.get("/state")
+    errors: list[str] = []
+    print("=== PHASE 4 APP ===")
+    print("health:", health.json())
+    print("tasks :", tasks.json())
+    print("reset :", reset.json())
+    print("step  :", step.json())
+    print("state :", state.json())
+    print()
+    errors += _assert(health.status_code == 200, f"Health endpoint failed ({health.status_code})")
+    errors += _assert(tasks.status_code == 200, f"Tasks endpoint failed ({tasks.status_code})")
+    errors += _assert(reset.status_code == 200, f"Reset endpoint failed ({reset.status_code})")
+    errors += _assert(step.status_code == 200, f"Step endpoint failed ({step.status_code})")
+    errors += _assert(state.status_code == 200, f"State endpoint failed ({state.status_code})")
+    errors += _assert("tasks" in tasks.json(), "Tasks response missing task list")
+    errors += _assert("observation" in reset.json(), "Reset response missing observation")
+    errors += _assert("reward" in step.json(), "Step response missing reward")
+    errors += _assert("task_summary" in state.json(), "State response missing task_summary")
+    return errors
+
+
+def check_phase_4_inference() -> list[str]:
+    from inference import build_observation_prompt, fallback_action_for_observation, parse_model_response
+
+    observation = {
+        "task_name": "data-breach",
+        "difficulty": "easy",
+        "turn": 1,
+        "max_turns": 8,
+        "scenario_description": "Test scenario",
+        "events": [{"event_type": "new_fact", "source": "security", "content": "50,000 records exposed"}],
+        "prior_statements": [],
+        "pending_deadlines": {"regulators": 4},
+        "required_disclosures": ["50,000 customer records were exposed"],
+        "forbidden_statements": ["we were hacked"],
+    }
+    prompt = build_observation_prompt(observation)
+    parsed = parse_model_response(
+        '{"messages":{"regulators":"Notify now","employees":"Internal update"},'
+        '"internal_notes":"Keep consistent"}'
+    )
+    fallback = fallback_action_for_observation(observation)
+    errors: list[str] = []
+    print("=== PHASE 4 INFERENCE ===")
+    print("prompt:")
+    print(prompt)
+    print("parsed:", parsed)
+    print("fallback:", fallback)
+    print()
+    errors += _assert("Task: data-breach" in prompt, "Inference prompt is missing task context")
+    errors += _assert("messages" in parsed and "regulators" in parsed["messages"], "Inference parser failed")
+    errors += _assert("regulators" in fallback["messages"], "Fallback action is missing regulator message")
+    return errors
+
+
+def check_phase_4_manifest() -> list[str]:
+    manifest_text = ROOT_DIR.joinpath("openenv.yaml").read_text()
+    errors: list[str] = []
+    print("=== PHASE 4 MANIFEST ===")
+    print(manifest_text)
+    print()
+    errors += _assert("name: crisis-command" in manifest_text, "Manifest missing environment name")
+    errors += _assert("reset: /reset" in manifest_text, "Manifest missing reset endpoint")
+    errors += _assert("step: /step" in manifest_text, "Manifest missing step endpoint")
+    errors += _assert("state: /state" in manifest_text, "Manifest missing state endpoint")
     return errors
 
 
@@ -224,6 +372,9 @@ def run_checks() -> int:
         ("Phase 2 judge", check_phase_2_judge),
         ("Phase 3 state manager", check_phase_3_state_manager),
         ("Phase 3 environment", check_phase_3_environment),
+        ("Phase 4 app", check_phase_4_app),
+        ("Phase 4 inference", check_phase_4_inference),
+        ("Phase 4 manifest", check_phase_4_manifest),
     ]
 
     failures: list[tuple[str, str]] = []
