@@ -6,6 +6,10 @@ from crisis_data import SCENARIOS, TASK_NAMES
 from grader import CrisisGrader, build_mock_actions
 from llm_judge import LLMJudge
 from models import CrisisAction, CrisisReward, RewardBreakdown, StakeholderMessage
+<<<<<<< ours
+=======
+from environment import CrisisCommunicationEnv
+>>>>>>> theirs
 from state_manager import CrisisStateManager
 
 
@@ -188,6 +192,34 @@ def check_phase_3_state_manager() -> list[str]:
     return errors
 
 
+<<<<<<< ours
+=======
+def check_phase_3_environment() -> list[str]:
+    env = CrisisCommunicationEnv()
+    observation = env.reset("product-recall")
+    next_observation, reward, done, info = env.step(
+        {
+            "messages": {
+                "regulators": "We acknowledge CPSC mandatory reporting for batch PE-2024-Q1 and 3 confirmed minor burn injuries.",
+                "customers": "Stop using batch PE-2024-Q1 immediately and contact support for a refund or replacement.",
+            },
+            "internal_notes": "Regulator first, customer safety second.",
+        }
+    )
+    state = env.state()
+    errors: list[str] = []
+    errors += _assert(observation.task_name == "product-recall", f"Environment reset loaded wrong task ({observation.task_name})")
+    errors += _assert(next_observation.turn == 2, f"Environment did not advance turn correctly ({next_observation.turn})")
+    errors += _assert(isinstance(reward, float), "Environment step did not return a scalar reward")
+    errors += _assert(done is False, "Environment ended the episode too early")
+    errors += _assert("reward_breakdown" in info, "Environment info is missing reward breakdown debug data")
+    errors += _assert(state["scenario_name"] == "product-recall", "Environment state snapshot has wrong scenario")
+    errors += _assert("task_summary" in state, "Environment state() is missing serializable task metadata")
+    errors += _assert("product-recall" in env.task_names(), "Environment task_names() missing expected task")
+    return errors
+
+
+>>>>>>> theirs
 def run_checks() -> int:
     checks: list[tuple[str, CheckFn]] = [
         ("Phase 1 data", check_phase_1_data),
@@ -197,6 +229,10 @@ def run_checks() -> int:
         ("Phase 2 exploits", check_phase_2_exploits),
         ("Phase 2 judge", check_phase_2_judge),
         ("Phase 3 state manager", check_phase_3_state_manager),
+<<<<<<< ours
+=======
+        ("Phase 3 environment", check_phase_3_environment),
+>>>>>>> theirs
     ]
 
     failures: list[tuple[str, str]] = []
