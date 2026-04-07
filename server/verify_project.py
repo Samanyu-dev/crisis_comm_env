@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Callable
+from contextlib import redirect_stdout
+from io import StringIO
 
 from crisis_data import SCENARIOS, TASK_NAMES
 from grader import CrisisGrader, build_mock_actions
@@ -362,6 +364,44 @@ def check_phase_4_manifest() -> list[str]:
     return errors
 
 
+def check_phase_5_inference() -> list[str]:
+    from inference import run_all_tasks
+
+    buffer = StringIO()
+    with redirect_stdout(buffer):
+        results = run_all_tasks(
+            env_url="http://127.0.0.1:8000",
+            tasks=["data-breach", "product-recall", "executive-fraud"],
+            api_base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            model_name="gemini-2.0-flash",
+            hf_token=None,
+            policy="scripted",
+            emit_logs=True,
+        )
+    output = buffer.getvalue()
+    errors: list[str] = []
+    print("=== PHASE 5 INFERENCE ===")
+    print(output)
+    print("scores:", {task: round(result["final_score"], 4) for task, result in results.items()})
+    print()
+    errors += _assert(output.count("START ") == 3, "Inference output is missing START lines")
+    errors += _assert(output.count("STEP ") >= 3, "Inference output is missing STEP lines")
+    errors += _assert(output.count("END ") == 3, "Inference output is missing END lines")
+    errors += _assert(
+        0.55 <= results["data-breach"]["final_score"] <= 0.65,
+        f"data-breach baseline out of range ({results['data-breach']['final_score']:.4f})",
+    )
+    errors += _assert(
+        0.35 <= results["product-recall"]["final_score"] <= 0.45,
+        f"product-recall baseline out of range ({results['product-recall']['final_score']:.4f})",
+    )
+    errors += _assert(
+        0.15 <= results["executive-fraud"]["final_score"] <= 0.25,
+        f"executive-fraud baseline out of range ({results['executive-fraud']['final_score']:.4f})",
+    )
+    return errors
+
+
 def run_checks() -> int:
     checks: list[tuple[str, CheckFn]] = [
         ("Phase 1 data", check_phase_1_data),
@@ -375,6 +415,7 @@ def run_checks() -> int:
         ("Phase 4 app", check_phase_4_app),
         ("Phase 4 inference", check_phase_4_inference),
         ("Phase 4 manifest", check_phase_4_manifest),
+        ("Phase 5 inference", check_phase_5_inference),
     ]
 
     failures: list[tuple[str, str]] = []

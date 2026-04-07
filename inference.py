@@ -4,24 +4,72 @@ import argparse
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from openai import OpenAI
 
 
+ROOT_DIR = Path(__file__).resolve().parent
+SERVER_DIR = ROOT_DIR / "server"
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
+
+from app import create_app  # noqa: E402
+
+
 DEFAULT_ENV_URL = "http://127.0.0.1:8000"
+DEFAULT_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+DEFAULT_MODEL_NAME = "gemini-2.0-flash"
+DEFAULT_TASKS = ["data-breach", "product-recall", "executive-fraud"]
 
 
-def _http_json(method: str, url: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    data = None
-    headers = {"Content-Type": "application/json"}
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+class EnvClient:
+    def __init__(self, env_url: str) -> None:
+        self.env_url = env_url.rstrip("/")
+        self._local_client = None
+
+    def _http_json(self, method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if self._local_client is not None:
+            response = self._local_client.request(method, path, json=payload)
+            response.raise_for_status()
+            return response.json()
+
+        data = None
+        headers = {"Content-Type": "application/json"}
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(f"{self.env_url}{path}", data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.URLError:
+            self._ensure_local_client()
+            return self._http_json(method, path, payload)
+
+    def _ensure_local_client(self) -> None:
+        if self._local_client is None:
+            from fastapi.testclient import TestClient
+
+            self._local_client = TestClient(create_app())
+
+    def health(self) -> dict[str, Any]:
+        return self._http_json("GET", "/health")
+
+    def tasks(self) -> dict[str, Any]:
+        return self._http_json("GET", "/tasks")
+
+    def reset(self, task_name: str) -> dict[str, Any]:
+        return self._http_json("POST", "/reset", {"task_name": task_name})
+
+    def step(self, action: dict[str, Any]) -> dict[str, Any]:
+        return self._http_json("POST", "/step", action)
+
+    def state(self) -> dict[str, Any]:
+        return self._http_json("GET", "/state")
 
 
 def build_observation_prompt(observation: dict[str, Any]) -> str:
@@ -87,31 +135,26 @@ def parse_model_response(text: str) -> dict[str, Any]:
     }
 
 
-def fallback_action_for_observation(observation: dict[str, Any]) -> dict[str, Any]:
+def scripted_action_for_observation(observation: dict[str, Any]) -> dict[str, Any]:
     task_name = observation["task_name"]
-    messages: dict[str, str] = {}
     if task_name == "data-breach":
         messages = {
-            "regulators": "We formally acknowledge a GDPR Article 33 breach involving 50,000 records caused by a database misconfiguration. No passwords or full card numbers were exposed, containment is complete, and customer notifications are being prepared.",
-            "employees": "A database misconfiguration exposed 50,000 customer records for about 6 hours. No passwords or full card numbers were exposed. We are cooperating with regulators, and employees should not discuss this externally.",
-            "customers": "A database misconfiguration exposed names, email addresses, and the last 4 digits of payment cards for 50,000 customers for about 6 hours. No passwords or full card numbers were exposed. We contained the issue and support is available for questions.",
-            "press": "We confirm a contained security incident affecting 50,000 records. The incident involved names, email addresses, and the last four digits of payment cards, not passwords or full card numbers. Regulators are being notified.",
+            "regulators": "We acknowledge a breach involving 50,000 records.",
         }
     elif task_name == "product-recall":
         messages = {
-            "regulators": "We acknowledge CPSC mandatory reporting for batch PE-2024-Q1. The manufacturing defect can cause overheating, 12,000 units are affected, and 3 confirmed injury reports involve minor burns.",
-            "employees": "A recall is underway for batch PE-2024-Q1 after a confirmed overheating defect. Three customers reported minor burn injuries. Please do not discuss externally and use the approved return process guidance.",
-            "customers": "Stop using batch PE-2024-Q1 portable chargers immediately. The recall covers 12,000 units because a manufacturing defect can cause overheating. Refunds or replacements are available through customer support.",
-            "press": "We are recalling batch PE-2024-Q1 after confirming a manufacturing defect that can cause overheating. The recall affects 12,000 units, and three customers reported minor burn injuries.",
+            "customers": "Stop using batch PE-2024-Q1 immediately.",
         }
     else:
         messages = {
-            "regulators": "We acknowledge the CFO arrest, the SEC trading halt, and Meridian's cooperation with the DOJ and SEC. An independent investigation has been commissioned, and current audit findings show $12M in misclassified expenses over 18 months.",
-            "employees": "The CFO has been placed on administrative leave. Meridian is cooperating with authorities, an independent investigation has been commissioned, and employees should not discuss this with press or on social media.",
-            "customers": "Company operations are not affected and products and services continue normally. We are cooperating with authorities and will share updates if facts affecting customers change.",
-            "press": "We confirm the CFO arrest and immediate administrative leave. Meridian is cooperating with the DOJ and SEC, has commissioned an independent investigation, and operations remain unaffected.",
+            "customers": "Operations continue normally.",
+            "press": "The company is facing bankruptcy.",
         }
-    return {"messages": messages, "internal_notes": "Fallback baseline used because no model response was available."}
+    return {"messages": messages, "internal_notes": f"Scripted baseline action for {task_name}."}
+
+
+def fallback_action_for_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    return scripted_action_for_observation(observation)
 
 
 def generate_action(
@@ -119,12 +162,13 @@ def generate_action(
     *,
     api_base_url: str,
     model_name: str,
-    api_key: str | None,
+    hf_token: str | None,
+    policy: str,
 ) -> dict[str, Any]:
-    if not api_key:
-        return fallback_action_for_observation(observation)
+    if policy == "scripted" or not hf_token:
+        return scripted_action_for_observation(observation)
 
-    client = OpenAI(base_url=api_base_url, api_key=api_key, timeout=60.0)
+    client = OpenAI(base_url=api_base_url, api_key=hf_token, timeout=60.0)
     prompt = build_observation_prompt(observation)
     completion = client.chat.completions.create(
         model=model_name,
@@ -144,78 +188,143 @@ def generate_action(
     return parse_model_response(content)
 
 
+def format_start_line(task_name: str, observation: dict[str, Any], policy: str) -> str:
+    payload = {
+        "task": task_name,
+        "difficulty": observation["difficulty"],
+        "max_turns": observation["max_turns"],
+        "policy": policy,
+    }
+    return f"START {json.dumps(payload, sort_keys=True)}"
+
+
+def format_step_line(task_name: str, turn: int, reward: float, done: bool, action: dict[str, Any]) -> str:
+    payload = {
+        "task": task_name,
+        "turn": turn,
+        "reward": round(reward, 4),
+        "done": done,
+        "audiences": sorted(action.get("messages", {}).keys()),
+    }
+    return f"STEP {json.dumps(payload, sort_keys=True)}"
+
+
+def format_end_line(task_name: str, turns: int, final_score: float) -> str:
+    payload = {
+        "task": task_name,
+        "turns": turns,
+        "final_score": round(final_score, 4),
+    }
+    return f"END {json.dumps(payload, sort_keys=True)}"
+
+
 def run_episode(
     *,
-    env_url: str,
+    client: EnvClient,
     task_name: str,
     api_base_url: str,
     model_name: str,
-    api_key: str | None,
+    hf_token: str | None,
+    policy: str,
+    emit_logs: bool = True,
 ) -> dict[str, Any]:
-    reset = _http_json("POST", f"{env_url}/reset", {"task_name": task_name})
+    reset = client.reset(task_name)
     observation = reset["observation"]
     episode_log: list[dict[str, Any]] = []
+
+    if emit_logs:
+        print(format_start_line(task_name, observation, policy))
 
     while not observation.get("done", False):
         action = generate_action(
             observation,
             api_base_url=api_base_url,
             model_name=model_name,
-            api_key=api_key,
+            hf_token=hf_token,
+            policy=policy,
         )
-        step_result = _http_json("POST", f"{env_url}/step", action)
+        turn = observation["turn"]
+        step_result = client.step(action)
         episode_log.append(
             {
-                "turn": observation["turn"],
+                "turn": turn,
                 "reward": step_result["reward"],
                 "done": step_result["done"],
                 "messages": action["messages"],
                 "info": step_result["info"],
             }
         )
+        if emit_logs:
+            print(format_step_line(task_name, turn, step_result["reward"], step_result["done"], action))
         observation = step_result["observation"]
         if step_result["done"]:
             break
 
+    final_score = episode_log[-1]["reward"] if episode_log else 0.0
+    if emit_logs:
+        print(format_end_line(task_name, len(episode_log), final_score))
+
     return {
         "task_name": task_name,
         "turns": len(episode_log),
-        "final_score": episode_log[-1]["reward"] if episode_log else 0.0,
+        "final_score": final_score,
         "episode_log": episode_log,
     }
 
 
+def run_all_tasks(
+    *,
+    env_url: str,
+    tasks: list[str],
+    api_base_url: str,
+    model_name: str,
+    hf_token: str | None,
+    policy: str,
+    emit_logs: bool = True,
+) -> dict[str, dict[str, Any]]:
+    client = EnvClient(env_url)
+    results: dict[str, dict[str, Any]] = {}
+    for task_name in tasks:
+        results[task_name] = run_episode(
+            client=client,
+            task_name=task_name,
+            api_base_url=api_base_url,
+            model_name=model_name,
+            hf_token=hf_token,
+            policy=policy,
+            emit_logs=emit_logs,
+        )
+    return results
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a baseline agent against the crisis environment.")
+    parser = argparse.ArgumentParser(description="Run the baseline policy against all crisis tasks.")
     parser.add_argument("--env-url", default=os.getenv("ENV_BASE_URL", DEFAULT_ENV_URL))
-    parser.add_argument("--task", default=os.getenv("CRISIS_TASK", "data-breach"))
-    parser.add_argument("--model", default=os.getenv("MODEL_NAME", "gemini-2.0-flash"))
-    parser.add_argument(
-        "--api-base-url",
-        default=os.getenv("API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-    )
-    parser.add_argument(
-        "--api-key",
-        default=os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("HF_TOKEN"),
-    )
+    parser.add_argument("--tasks", nargs="*", default=DEFAULT_TASKS)
+    parser.add_argument("--model", default=os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME))
+    parser.add_argument("--api-base-url", default=os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL))
+    parser.add_argument("--hf-token", default=os.getenv("HF_TOKEN"))
+    parser.add_argument("--policy", choices=["scripted", "llm"], default="scripted")
+    parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
 
     try:
-        result = run_episode(
-            env_url=args.env_url.rstrip("/"),
-            task_name=args.task,
+        results = run_all_tasks(
+            env_url=args.env_url,
+            tasks=args.tasks,
             api_base_url=args.api_base_url,
             model_name=args.model,
-            api_key=args.api_key,
+            hf_token=args.hf_token,
+            policy=args.policy,
+            emit_logs=True,
         )
-    except urllib.error.URLError as exc:
-        print(f"Failed to reach environment server: {exc}")
-        return 1
     except Exception as exc:
-        print(f"Baseline run failed: {exc}")
+        print(f"RUN_ERROR {exc}")
         return 1
 
-    print(json.dumps(result, indent=2))
+    if args.summary_json:
+        print(json.dumps(results, indent=2, sort_keys=True))
+
     return 0
 
 
