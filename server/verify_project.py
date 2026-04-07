@@ -6,10 +6,7 @@ from crisis_data import SCENARIOS, TASK_NAMES
 from grader import CrisisGrader, build_mock_actions
 from llm_judge import LLMJudge
 from models import CrisisAction, CrisisReward, RewardBreakdown, StakeholderMessage
-<<<<<<< ours
-=======
 from environment import CrisisCommunicationEnv
->>>>>>> theirs
 from state_manager import CrisisStateManager
 
 
@@ -192,8 +189,6 @@ def check_phase_3_state_manager() -> list[str]:
     return errors
 
 
-<<<<<<< ours
-=======
 def check_phase_3_environment() -> list[str]:
     env = CrisisCommunicationEnv()
     observation = env.reset("product-recall")
@@ -219,7 +214,6 @@ def check_phase_3_environment() -> list[str]:
     return errors
 
 
->>>>>>> theirs
 def run_checks() -> int:
     checks: list[tuple[str, CheckFn]] = [
         ("Phase 1 data", check_phase_1_data),
@@ -229,10 +223,7 @@ def run_checks() -> int:
         ("Phase 2 exploits", check_phase_2_exploits),
         ("Phase 2 judge", check_phase_2_judge),
         ("Phase 3 state manager", check_phase_3_state_manager),
-<<<<<<< ours
-=======
         ("Phase 3 environment", check_phase_3_environment),
->>>>>>> theirs
     ]
 
     failures: list[tuple[str, str]] = []
