@@ -21,6 +21,8 @@ if str(SERVER_DIR) not in sys.path:
 
 from app import create_app  # noqa: E402
 from agent_policy import RlTablePolicy, StrategicPolicy  # noqa: E402
+from crisis_data import base_task_name  # noqa: E402
+from tasks import list_challenge_task_names, list_task_names  # noqa: E402
 
 
 BENCHMARK_NAME = "crisis-command"
@@ -28,7 +30,8 @@ BENCHMARK_NAME = "crisis-command"
 DEFAULT_ENV_URL = "http://127.0.0.1:8000"
 DEFAULT_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL_NAME = "gemini-2.0-flash"
-DEFAULT_TASKS = ["data-breach", "product-recall", "executive-fraud"]
+DEFAULT_STANDARD_TASKS = list_task_names(include_challenge=False)
+DEFAULT_CHALLENGE_TASKS = list_challenge_task_names()
 SUCCESS_SCORE_THRESHOLD = 0.10
 
 API_BASE_URL = os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL)
@@ -38,6 +41,7 @@ LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RL_POLICY_PATH = os.getenv("RL_POLICY_PATH", str(ROOT_DIR / "artifacts" / "rl_policy.json"))
+CHALLENGE_RL_POLICY_PATH = str(ROOT_DIR / "artifacts" / "rl_policy_challenge.json")
 
 if hasattr(signal, "SIGPIPE"):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
@@ -163,7 +167,7 @@ def parse_model_response(text: str) -> dict[str, Any]:
 
 
 def scripted_action_for_observation(observation: dict[str, Any]) -> dict[str, Any]:
-    task_name = observation["task_name"]
+    task_name = base_task_name(observation["task_name"])
     if task_name == "data-breach":
         messages = {
             "regulators": "We acknowledge a breach involving 50,000 records.",
@@ -379,10 +383,32 @@ def run_all_tasks(
     return results
 
 
+def resolve_tasks(*, tasks: list[str] | None, task_set: str) -> list[str]:
+    if tasks:
+        return tasks
+    if task_set == "challenge":
+        return list(DEFAULT_CHALLENGE_TASKS)
+    if task_set == "all":
+        return list_task_names(include_challenge=True)
+    return list(DEFAULT_STANDARD_TASKS)
+
+
+def resolve_rl_policy_path(*, rl_policy_path: str | None, task_set: str) -> str | None:
+    if task_set == "challenge":
+        explicit = rl_policy_path and rl_policy_path != RL_POLICY_PATH
+        if explicit:
+            return rl_policy_path
+        challenge_path = Path(CHALLENGE_RL_POLICY_PATH)
+        if challenge_path.exists():
+            return str(challenge_path)
+    return rl_policy_path
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the baseline policy against all crisis tasks.")
     parser.add_argument("--env-url", default=os.getenv("ENV_BASE_URL", DEFAULT_ENV_URL))
-    parser.add_argument("--tasks", nargs="*", default=DEFAULT_TASKS)
+    parser.add_argument("--tasks", nargs="*", default=None)
+    parser.add_argument("--task-set", choices=["standard", "challenge", "all"], default="standard")
     parser.add_argument("--model", default=MODEL_NAME)
     parser.add_argument("--api-base-url", default=API_BASE_URL)
     parser.add_argument("--hf-token", default=HF_TOKEN)
@@ -390,16 +416,21 @@ def main() -> int:
     parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="auto")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
+    resolved_tasks = resolve_tasks(tasks=args.tasks, task_set=args.task_set)
+    resolved_rl_policy_path = resolve_rl_policy_path(
+        rl_policy_path=args.rl_policy_path,
+        task_set=args.task_set,
+    )
 
     try:
         results = run_all_tasks(
             env_url=args.env_url,
-            tasks=args.tasks,
+            tasks=resolved_tasks,
             api_base_url=args.api_base_url,
             model_name=args.model,
             hf_token=args.hf_token,
             policy=args.policy,
-            rl_policy_path=args.rl_policy_path,
+            rl_policy_path=resolved_rl_policy_path,
             emit_logs=True,
         )
     except Exception:

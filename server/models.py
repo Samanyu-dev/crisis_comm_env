@@ -33,7 +33,7 @@ class CrisisObservation(BaseModel):
 
     task_name: str = Field(min_length=1)
     scenario_description: str = Field(min_length=1)
-    difficulty: Literal["easy", "medium", "hard"]
+    difficulty: Literal["easy", "medium", "hard", "challenge"]
     turn: int = Field(ge=1)
     max_turns: int = Field(ge=1)
     events: list[TurnEvent] = Field(default_factory=list)

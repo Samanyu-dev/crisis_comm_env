@@ -34,6 +34,12 @@ This is meant to model a real communications job rather than a toy benchmark. Th
 - `product-recall` (`medium`): consumer hardware recall with safety risk, injury reports, and CPSC notification.
 - `executive-fraud` (`hard`): CFO arrest, SEC trading halt, expanding DOJ scope, and reputational escalation.
 
+Optional challenge variants for stronger reasoning stress tests:
+
+- `data-breach-challenge`
+- `product-recall-challenge`
+- `executive-fraud-challenge`
+
 ## Observation space
 
 Each `reset()` or `step()` returns a typed `CrisisObservation` containing:
@@ -72,7 +78,7 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 ## API
 
 - `GET /health`
-- `GET /tasks`
+- `GET /tasks` (`?include_challenge=true` to include challenge variants)
 - `POST /reset`
 - `POST /step`
 - `GET /state`
@@ -82,6 +88,7 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 - [inference.py](/Users/apple/crisis_comm_env/inference.py): baseline runner with OpenAI-compatible client and required stdout logging
 - [agent_policy.py](/Users/apple/crisis_comm_env/agent_policy.py): strategic multi-audience policy + RL action library
 - [train_rl.py](/Users/apple/crisis_comm_env/train_rl.py): policy-gradient training loop that learns a table policy from environment rewards
+- [evaluate_agent.py](/Users/apple/crisis_comm_env/evaluate_agent.py): quick benchmark runner across standard/challenge task sets
 - `artifacts/rl_policy.json`: trained RL policy artifact consumed by `inference.py --policy rl`
 - [openenv.yaml](/Users/apple/crisis_comm_env/openenv.yaml): OpenEnv metadata
 - [server/app.py](/Users/apple/crisis_comm_env/server/app.py): FastAPI application
@@ -153,11 +160,32 @@ Strategic deterministic policy (multi-audience, deadline-aware):
 python inference.py --policy strategic
 ```
 
+Run policy on challenge tasks:
+
+```bash
+python inference.py --policy strategic --task-set challenge
+```
+
 RL policy (trained with REINFORCE-style updates over discrete action specs):
 
 ```bash
 python train_rl.py --episodes 1200 --eval-every 200
 python inference.py --policy rl
+```
+
+Train directly on challenge curriculum:
+
+```bash
+python train_rl.py --task-set challenge --episodes 1600 --eval-every 200 \
+  --out artifacts/rl_policy_challenge.json
+python inference.py --policy rl --task-set challenge \
+  --rl-policy-path artifacts/rl_policy_challenge.json
+```
+
+Compare policy quality quickly:
+
+```bash
+python evaluate_agent.py --policies strategic rl --task-sets standard challenge
 ```
 
 Recent local runs:

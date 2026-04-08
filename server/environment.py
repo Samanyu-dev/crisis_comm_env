@@ -36,8 +36,8 @@ class CrisisCommunicationEnv:
         snapshot["task_summary"] = get_task_summary(self.manager.scenario.name)
         return snapshot
 
-    def tasks(self) -> list[dict[str, Any]]:
-        return get_task_catalog()
+    def tasks(self, *, include_challenge: bool = False) -> list[dict[str, Any]]:
+        return get_task_catalog(include_challenge=include_challenge)
 
-    def task_names(self) -> list[str]:
-        return list_task_names()
+    def task_names(self, *, include_challenge: bool = False) -> list[str]:
+        return list_task_names(include_challenge=include_challenge)

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from crisis_data import SCENARIOS, CrisisScenario
+from crisis_data import SCENARIOS, CrisisScenario, base_task_name
 from llm_judge import LLMJudge
 from models import CrisisAction, CrisisReward, RewardBreakdown, StakeholderMessage
 
@@ -451,7 +451,7 @@ class CrisisGrader:
 
         seen_claims: dict[str, str] = {}
         for audience, message in [*prior_messages, *messages.items()]:
-            claims = self._extract_claims(scenario.name, message)
+            claims = self._extract_claims(base_task_name(scenario.name), message)
             for key, value in claims.items():
                 if key in seen_claims and seen_claims[key] != value:
                     contradictions.append(f"{audience}:{key}")

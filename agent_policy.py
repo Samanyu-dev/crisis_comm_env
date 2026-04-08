@@ -21,6 +21,10 @@ ACTION_LIBRARY: list[dict[str, Any]] = [
 ]
 
 
+def _base_task_name(task_name: str) -> str:
+    return task_name[: -len("-challenge")] if task_name.endswith("-challenge") else task_name
+
+
 def _dedupe_keep_order(values: list[str]) -> list[str]:
     seen: set[str] = set()
     deduped: list[str] = []
@@ -55,14 +59,15 @@ def observation_state_key(observation: dict[str, Any]) -> str:
 
 
 def _build_message(task_name: str, audience: str, style: str = "balanced") -> str:
-    if task_name == "data-breach":
+    base_name = _base_task_name(task_name)
+    if base_name == "data-breach":
         templates = {
             "regulators": "We acknowledge a GDPR Article 33 notifiable breach involving 50,000 records caused by a misconfiguration. No passwords or full credit card numbers were exposed, containment is complete, and remediation is underway.",
             "employees": "Today we confirmed a contained security incident affecting 50,000 customer records. No passwords or full credit card numbers were exposed. Please do not discuss externally and route media inquiries to communications.",
             "customers": "A database misconfiguration exposed names, email addresses, and the last four digits of payment cards for 50,000 customers. No passwords or full card numbers were exposed. We have fixed the issue and support is available for questions.",
             "press": "We confirm a contained incident affecting 50,000 records due to a misconfiguration. Sensitive credentials and full payment numbers were not exposed. The issue is fixed and regulator notification is in progress.",
         }
-    elif task_name == "product-recall":
+    elif base_name == "product-recall":
         templates = {
             "regulators": "We acknowledge CPSC mandatory reporting for recall batch PE-2024-Q1. A manufacturing defect can cause overheating, 12,000 units are affected, and 3 confirmed minor burn injuries have been reported.",
             "employees": "A recall is active for batch PE-2024-Q1 due to an overheating defect linked to 3 minor injury reports. Do not discuss externally and direct questions to the communications and support playbook.",
@@ -108,7 +113,7 @@ class StrategicPolicy:
     max_audiences_per_turn: int = 3
 
     def _select_audiences(self, observation: dict[str, Any]) -> list[str]:
-        task_name = observation["task_name"]
+        task_name = _base_task_name(observation["task_name"])
         turn = int(observation["turn"])
         available = set(observation.get("available_audiences", []))
         pending = observation.get("pending_deadlines", {})

@@ -16,9 +16,21 @@ if str(SERVER_DIR) not in sys.path:
 
 from agent_policy import ACTION_LIBRARY, action_from_spec, observation_state_key
 from environment import CrisisCommunicationEnv
+from tasks import list_challenge_task_names, list_task_names
 
 
-DEFAULT_TASKS = ["data-breach", "product-recall", "executive-fraud"]
+DEFAULT_STANDARD_TASKS = list_task_names(include_challenge=False)
+DEFAULT_CHALLENGE_TASKS = list_challenge_task_names()
+
+
+def resolve_tasks(*, tasks: list[str] | None, task_set: str) -> list[str]:
+    if tasks:
+        return tasks
+    if task_set == "challenge":
+        return list(DEFAULT_CHALLENGE_TASKS)
+    if task_set == "all":
+        return list_task_names(include_challenge=True)
+    return list(DEFAULT_STANDARD_TASKS)
 
 
 def softmax(logits: list[float], temperature: float = 1.0) -> list[float]:
@@ -141,9 +153,11 @@ def main() -> int:
     parser.add_argument("--temperature", type=float, default=1.2)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--eval-every", type=int, default=200)
-    parser.add_argument("--tasks", nargs="*", default=DEFAULT_TASKS)
+    parser.add_argument("--tasks", nargs="*", default=None)
+    parser.add_argument("--task-set", choices=["standard", "challenge", "all"], default="standard")
     parser.add_argument("--out", default=str(ROOT_DIR / "artifacts" / "rl_policy.json"))
     args = parser.parse_args()
+    resolved_tasks = resolve_tasks(tasks=args.tasks, task_set=args.task_set)
 
     random.seed(args.seed)
     env = CrisisCommunicationEnv()
@@ -152,7 +166,7 @@ def main() -> int:
     rolling_score = 0.0
 
     for episode in range(1, args.episodes + 1):
-        task_name = random.choice(args.tasks)
+        task_name = random.choice(resolved_tasks)
         transitions, final_score = run_episode(
             env,
             task_name=task_name,
@@ -170,7 +184,7 @@ def main() -> int:
         rolling_score = 0.98 * rolling_score + 0.02 * final_score
 
         if episode % args.eval_every == 0 or episode == 1:
-            eval_scores = evaluate_policy(logits_by_state, args.tasks)
+            eval_scores = evaluate_policy(logits_by_state, resolved_tasks)
             print(
                 json.dumps(
                     {
@@ -178,14 +192,15 @@ def main() -> int:
                         "rolling_score": round(rolling_score, 4),
                         "eval_scores": eval_scores,
                         "state_count": len(logits_by_state),
+                        "task_set": args.task_set,
                     },
                     sort_keys=True,
                 )
             )
 
     out_path = Path(args.out)
-    save_policy(out_path, logits_by_state, episodes=args.episodes, seed=args.seed, tasks=args.tasks)
-    final_scores = evaluate_policy(logits_by_state, args.tasks)
+    save_policy(out_path, logits_by_state, episodes=args.episodes, seed=args.seed, tasks=resolved_tasks)
+    final_scores = evaluate_policy(logits_by_state, resolved_tasks)
     print(json.dumps({"saved_policy": str(out_path), "final_scores": final_scores}, sort_keys=True))
     return 0
 

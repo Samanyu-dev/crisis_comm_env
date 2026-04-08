@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from crisis_data import SCENARIOS, TASK_NAMES, CrisisScenario
+from crisis_data import (
+    CHALLENGE_TASK_NAMES,
+    SCENARIOS,
+    TASK_NAMES,
+    CrisisScenario,
+)
 
 
-def list_task_names() -> list[str]:
+def list_task_names(*, include_challenge: bool = False) -> list[str]:
+    if include_challenge:
+        return [*TASK_NAMES, *CHALLENGE_TASK_NAMES]
     return list(TASK_NAMES)
+
+
+def list_challenge_task_names() -> list[str]:
+    return list(CHALLENGE_TASK_NAMES)
 
 
 def get_task(name: str) -> CrisisScenario:
@@ -30,5 +41,5 @@ def get_task_summary(name: str) -> dict[str, Any]:
     }
 
 
-def get_task_catalog() -> list[dict[str, Any]]:
-    return [get_task_summary(name) for name in TASK_NAMES]
+def get_task_catalog(*, include_challenge: bool = False) -> list[dict[str, Any]]:
+    return [get_task_summary(name) for name in list_task_names(include_challenge=include_challenge)]

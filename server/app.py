@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field
 import uvicorn
 
@@ -32,10 +32,13 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     def root() -> dict[str, Any]:
+        standard_task_names = env.task_names(include_challenge=False)
+        all_task_names = env.task_names(include_challenge=True)
         return {
             "name": "crisis-command",
             "status": "ok",
-            "task_names": env.task_names(),
+            "task_names": standard_task_names,
+            "challenge_task_names": all_task_names[len(standard_task_names) :],
             "endpoints": ["/health", "/tasks", "/reset", "/step", "/state"],
         }
 
@@ -50,8 +53,8 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/tasks")
-    def tasks() -> dict[str, Any]:
-        return {"tasks": env.tasks()}
+    def tasks(include_challenge: bool = Query(default=False)) -> dict[str, Any]:
+        return {"tasks": env.tasks(include_challenge=include_challenge)}
 
     @app.post("/reset")
     def reset(request: ResetRequest) -> dict[str, Any]:
