@@ -23,6 +23,7 @@ from app import create_app  # noqa: E402
 
 
 BENCHMARK_NAME = "crisis-command"
+# Local app.py default. Docker/HF Spaces run the service on port 7860.
 DEFAULT_ENV_URL = "http://127.0.0.1:8000"
 DEFAULT_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL_NAME = "gemini-2.0-flash"
@@ -171,8 +172,9 @@ def scripted_action_for_observation(observation: dict[str, Any]) -> dict[str, An
         }
     else:
         messages = {
-            "customers": "Operations continue normally.",
-            "press": "The company is facing bankruptcy.",
+            "employees": "We are reviewing this matter.",
+            "customers": "We are reviewing this matter.",
+            "press": "We are reviewing this matter.",
         }
     return {"messages": messages, "internal_notes": f"Scripted baseline action for {task_name}."}
 
