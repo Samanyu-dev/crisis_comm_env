@@ -73,6 +73,7 @@ SUCCESS_SCORE_THRESHOLD = 0.10
 
 API_BASE_URL = os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL)
 MODEL_NAME = os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME)
+API_KEY = os.getenv("API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -148,6 +149,8 @@ def _is_hf_router_endpoint(api_base_url: str) -> bool:
 def _resolve_api_key(*, explicit_key: str | None = None, api_base_url: str) -> str | None:
     if explicit_key:
         return explicit_key
+    if API_KEY:
+        return API_KEY
     if _is_gemini_endpoint(api_base_url):
         return GEMINI_API_KEY or OPENAI_API_KEY or HF_TOKEN
     if _is_hf_router_endpoint(api_base_url):
@@ -632,7 +635,10 @@ def resolve_rl_policy_path(*, rl_policy_path: str | None, task_set: str) -> str 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the baseline policy against all crisis tasks.")
-    parser.add_argument("--env-url", default=os.getenv("ENV_BASE_URL", DEFAULT_ENV_URL))
+    parser.add_argument(
+        "--env-url",
+        default=os.getenv("OPENENV_SERVER_URL") or os.getenv("ENV_BASE_URL", DEFAULT_ENV_URL),
+    )
     parser.add_argument("--tasks", nargs="*", default=None)
     parser.add_argument("--task-set", choices=["standard", "challenge", "all"], default="standard")
     parser.add_argument("--model", default=MODEL_NAME)
@@ -640,7 +646,9 @@ def main() -> int:
     parser.add_argument("--hf-token", default=None)
     parser.add_argument("--api-key", default=None)
     parser.add_argument("--rl-policy-path", default=RL_POLICY_PATH)
-    parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="scripted")
+    # default=auto ensures evaluator-injected API_KEY triggers LLM calls,
+    # while still allowing local fallback when no key is present.
+    parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="auto")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
     resolved_tasks = resolve_tasks(tasks=args.tasks, task_set=args.task_set)
