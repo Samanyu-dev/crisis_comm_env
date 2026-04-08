@@ -57,16 +57,18 @@ def create_app() -> FastAPI:
         return {"tasks": env.tasks(include_challenge=include_challenge)}
 
     @app.post("/reset")
-    def reset(request: ResetRequest) -> dict[str, Any]:
-        observation = env.reset(request.task_name)
+    def reset(request: ResetRequest | None = None) -> dict[str, Any]:
+        task_name = request.task_name if request else None
+        observation = env.reset(task_name)
         return {
             "observation": observation.model_dump(),
             "state": env.state(),
         }
 
     @app.post("/step")
-    def step(request: StepRequest) -> dict[str, Any]:
-        observation, reward, done, info = env.step(request.model_dump())
+    def step(request: StepRequest | None = None) -> dict[str, Any]:
+        payload = request.model_dump() if request else StepRequest().model_dump()
+        observation, reward, done, info = env.step(payload)
         return {
             "observation": observation.model_dump(),
             "reward": reward,
