@@ -221,6 +221,7 @@ class CrisisGrader:
             prior_messages,
             factual_info["false_fact_hits"],
             audience_info["judge_results"],
+            turn=turn,
         )
 
         weighted = (
@@ -516,6 +517,8 @@ class CrisisGrader:
         prior_messages: list[tuple[str, str]],
         false_fact_hits: list[str],
         judge_results: dict[str, dict[str, Any]],
+        *,
+        turn: int,
     ) -> tuple[float, dict[str, Any]]:
         penalty = 0.0
         notes: list[str] = []
@@ -550,6 +553,27 @@ class CrisisGrader:
         if json_dumping:
             penalty += 0.05
             notes.append("Output looks like schema stuffing instead of audience-ready communication.")
+
+        # If every audience gets the exact same message package despite new turn events,
+        # treat it as non-adaptive communication behavior.
+        last_message_by_audience: dict[str, str] = {}
+        for audience, content in prior_messages:
+            last_message_by_audience[audience] = _normalize_text(content)
+        repeated_audiences = [
+            audience
+            for audience, content in normalized_messages.items()
+            if content and content == last_message_by_audience.get(audience, "")
+        ]
+        turn_has_new_signal = any(event.turn == turn for event in scenario.turn_events) or any(
+            pressure.turn == turn for pressure in scenario.stakeholder_pressures
+        )
+        if (
+            turn_has_new_signal
+            and len(normalized_messages) >= 4
+            and len(repeated_audiences) >= 4
+        ):
+            penalty += 0.08
+            notes.append("All audience messages were unchanged despite new turn events.")
 
         all_hedging = bool(normalized_messages) and all(
             any(phrase in text for phrase in ("we don't know", "we do not know", "cannot confirm", "no comment"))

@@ -2,12 +2,13 @@
 
 This file is a quick command reference for local development, validation, Docker, Hugging Face Space, and agent training/evaluation.
 
-Note: `inference.py` and `api_diagnostics.py` auto-load `/Users/apple/crisis_comm_env/.env`.
+Note: `inference.py` and `api_diagnostics.py` auto-load `.env` from the repo root.
 
 ## 1) Initial Setup
 
 ```bash
-cd /Users/apple/crisis_comm_env
+export REPO_ROOT=/path/to/crisis_comm_env
+cd "$REPO_ROOT"
 python3.10 -m venv venv
 source venv/bin/activate
 pip install -r server/requirements.txt
@@ -16,21 +17,21 @@ pip install -r server/requirements.txt
 ## 2) Run API Locally (FastAPI)
 
 ```bash
-cd /Users/apple/crisis_comm_env/server
+cd "$REPO_ROOT/server"
 source ../venv/bin/activate
-uvicorn app:app --host 0.0.0.0 --port 8000
+uvicorn app:app --host 0.0.0.0 --port 7860
 ```
 
 Health check:
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:7860/health
 ```
 
 Reset check:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/reset \
+curl -X POST http://127.0.0.1:7860/reset \
   -H "Content-Type: application/json" \
   -d '{"task_name":"data-breach"}'
 ```
@@ -38,7 +39,7 @@ curl -X POST http://127.0.0.1:8000/reset \
 ## 3) Project Verification
 
 ```bash
-cd /Users/apple/crisis_comm_env
+cd "$REPO_ROOT"
 source venv/bin/activate
 python3.10 server/verify_project.py
 ```
@@ -54,7 +55,7 @@ openenv validate
 Build:
 
 ```bash
-cd /Users/apple/crisis_comm_env
+cd "$REPO_ROOT"
 docker build -t crisis-comm-local .
 ```
 
@@ -76,17 +77,17 @@ curl -X POST http://127.0.0.1:7860/reset -H "Content-Type: application/json" -d 
 Scripted baseline (for reproducible target scores):
 
 ```bash
-cd /Users/apple/crisis_comm_env
+cd "$REPO_ROOT"
 source venv/bin/activate
 python3.10 inference.py --policy scripted
 ```
 
-LLM policy (OpenAI-compatible, Gemini/OpenRouter/etc):
+LLM policy (OpenAI-compatible, HF Router default):
 
 ```bash
-export API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-export MODEL_NAME="gemini-2.0-flash"
-export GEMINI_API_KEY="YOUR_GEMINI_KEY"
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
+export HF_TOKEN="YOUR_HF_TOKEN"
 python3.10 inference.py --policy llm
 ```
 
@@ -170,8 +171,17 @@ Gemini explicit probe:
 
 ```bash
 export API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
-export MODEL_NAME="gemini-2.0-flash"
+export MODEL_NAME="gemini-2.5-flash"
 export GEMINI_API_KEY="YOUR_GEMINI_KEY"
+python3.10 api_diagnostics.py
+```
+
+HF Router explicit probe:
+
+```bash
+export API_BASE_URL="https://router.huggingface.co/v1"
+export MODEL_NAME="Qwen/Qwen2.5-72B-Instruct"
+export HF_TOKEN="YOUR_HF_TOKEN"
 python3.10 api_diagnostics.py
 ```
 
@@ -196,14 +206,14 @@ curl -N \
 ## 11) Submission Validation
 
 ```bash
-cd /Users/apple/crisis_comm_env
+cd "$REPO_ROOT"
 bash validate-submission.sh https://sammy1808-crisis-comm.hf.space .
 ```
 
 ## 12) Git Commit + Push
 
 ```bash
-cd /Users/apple/crisis_comm_env
+cd "$REPO_ROOT"
 git add .
 git commit -m "Your commit message"
 git push origin main
@@ -215,7 +225,7 @@ git push hf-space main
 Show task lists (standard vs challenge):
 
 ```bash
-python3.10 -c "import sys; sys.path.insert(0,'/Users/apple/crisis_comm_env/server'); from tasks import list_task_names; print('standard:', list_task_names(include_challenge=False)); print('all:', list_task_names(include_challenge=True))"
+python3.10 -c "import sys, os; sys.path.insert(0, os.path.join(os.environ['REPO_ROOT'], 'server')); from tasks import list_task_names; print('standard:', list_task_names(include_challenge=False)); print('all:', list_task_names(include_challenge=True))"
 ```
 
 Syntax check key files:

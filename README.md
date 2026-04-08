@@ -75,6 +75,16 @@ The environment returns a `CrisisReward` with a normalized score in `[0.0, 1.0]`
 
 The grader is deterministic and penalizes blank statements, copy-paste messaging, false-fact repetition, missed regulatory windows, contradictions, and hedging-only behavior.
 
+## Evidence snapshot
+
+| Check | Result |
+|---|---|
+| Task count | 3 standard tasks (`easy`, `medium`, `hard`) + challenge variants |
+| Deterministic grader variance | Strong spread across bad/ok/good fixtures on each standard task |
+| Baseline reproducibility (`--policy scripted`) | `data-breach ~0.60`, `product-recall ~0.40`, `executive-fraud ~0.20` |
+| Interface compliance | `step/reset/state` endpoints + typed Pydantic models |
+| Deployment gates | `openenv validate` + `validate-submission.sh` pass |
+
 ## API
 
 - `GET /health`
@@ -85,20 +95,20 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 
 ## Project layout
 
-- [inference.py](/Users/apple/crisis_comm_env/inference.py): baseline runner with OpenAI-compatible client and required stdout logging
-- [agent_policy.py](/Users/apple/crisis_comm_env/agent_policy.py): strategic multi-audience policy + RL action library
-- [train_rl.py](/Users/apple/crisis_comm_env/train_rl.py): policy-gradient training loop that learns a table policy from environment rewards
-- [evaluate_agent.py](/Users/apple/crisis_comm_env/evaluate_agent.py): quick benchmark runner across standard/challenge task sets
+- [inference.py](inference.py): baseline runner with OpenAI-compatible client and required stdout logging
+- [agent_policy.py](agent_policy.py): strategic multi-audience policy + RL action library
+- [train_rl.py](train_rl.py): policy-gradient training loop that learns a table policy from environment rewards
+- [evaluate_agent.py](evaluate_agent.py): quick benchmark runner across standard/challenge task sets
 - `api_diagnostics.py`: probes `/models` and `/chat/completions` with latency and rate-limit header snapshots
 - `artifacts/rl_policy.json`: trained RL policy artifact consumed by `inference.py --policy rl`
-- [openenv.yaml](/Users/apple/crisis_comm_env/openenv.yaml): OpenEnv metadata
-- [server/app.py](/Users/apple/crisis_comm_env/server/app.py): FastAPI application
-- [server/environment.py](/Users/apple/crisis_comm_env/server/environment.py): `reset()/step()/state()` wrapper
-- [server/models.py](/Users/apple/crisis_comm_env/server/models.py): typed Pydantic models
-- [server/crisis_data.py](/Users/apple/crisis_comm_env/server/crisis_data.py): scenario data, ground truth, false facts, audiences
-- [server/grader.py](/Users/apple/crisis_comm_env/server/grader.py): deterministic scoring and exploit checks
-- [server/state_manager.py](/Users/apple/crisis_comm_env/server/state_manager.py): episode memory and state transitions
-- [server/llm_judge.py](/Users/apple/crisis_comm_env/server/llm_judge.py): cached OpenAI-compatible audience judge with heuristic fallback
+- [openenv.yaml](openenv.yaml): OpenEnv metadata
+- [server/app.py](server/app.py): FastAPI application
+- [server/environment.py](server/environment.py): `reset()/step()/state()` wrapper
+- [server/models.py](server/models.py): typed Pydantic models
+- [server/crisis_data.py](server/crisis_data.py): scenario data, ground truth, false facts, audiences
+- [server/grader.py](server/grader.py): deterministic scoring and exploit checks
+- [server/state_manager.py](server/state_manager.py): episode memory and state transitions
+- [server/llm_judge.py](server/llm_judge.py): cached OpenAI-compatible audience judge with heuristic fallback
 
 ## Setup
 
@@ -110,10 +120,11 @@ pip install -r server/requirements.txt
 
 Environment variables:
 
-- `API_BASE_URL`: defaults to the Gemini OpenAI-compatible endpoint
-- `MODEL_NAME`: defaults to `gemini-2.0-flash`
-- `GEMINI_API_KEY`: preferred key when using Gemini endpoint
+- `API_BASE_URL`: defaults to the Hugging Face Router OpenAI-compatible endpoint
+- `MODEL_NAME`: defaults to `Qwen/Qwen2.5-72B-Instruct`
+- `MODEL_FALLBACKS`: optional comma-separated fallback models (default empty)
 - `HF_TOKEN`: hackathon-required variable; preferred for HF router endpoints
+- `GEMINI_API_KEY`: optional when using Gemini endpoint
 - `OPENAI_API_KEY`: fallback for other OpenAI-compatible providers
 
 `inference.py` and `api_diagnostics.py` auto-load `.env` from the repo root.
@@ -122,7 +133,7 @@ Environment variables:
 
 ```bash
 cd server
-uvicorn app:app --host 0.0.0.0 --port 8000
+uvicorn app:app --host 0.0.0.0 --port 7860
 ```
 
 ## Docker
@@ -140,12 +151,14 @@ Scripted baseline for reproducible validation:
 python inference.py --policy scripted
 ```
 
-LLM baseline using Gemini through the OpenAI client:
+`python inference.py` defaults to scripted policy for stable baseline reproducibility.
+
+LLM baseline using HF Router through the OpenAI client:
 
 ```bash
-export API_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-export MODEL_NAME=gemini-2.0-flash
-export HF_TOKEN=your_api_key
+export API_BASE_URL=https://router.huggingface.co/v1
+export MODEL_NAME=Qwen/Qwen2.5-72B-Instruct
+export HF_TOKEN=your_hf_token
 python inference.py --policy llm
 ```
 

@@ -15,7 +15,35 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
     def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
         return False
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            if key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        return
+
+
+_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(_ENV_PATH)
+_load_env_file(_ENV_PATH)
 
 
 def _normalize_text(text: str) -> str:
@@ -60,10 +88,10 @@ class LLMJudge:
     ) -> None:
         self.cache_path = Path(cache_path or Path(__file__).with_name(".llm_judge_cache.json"))
         self.api_base_url = api_base_url or os.getenv(
-            "API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
+            "API_BASE_URL", "https://router.huggingface.co/v1"
         )
         self.api_key = _resolve_api_key(self.api_base_url, explicit=api_key)
-        self.model_name = model_name or os.getenv("MODEL_NAME", "gemini-2.0-flash")
+        self.model_name = model_name or os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
         self._cache = self._load_cache()
 
     def _load_cache(self) -> dict[str, dict[str, Any]]:

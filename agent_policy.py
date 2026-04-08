@@ -36,6 +36,39 @@ def _dedupe_keep_order(values: list[str]) -> list[str]:
     return deduped
 
 
+def _urgent_audiences(observation: dict[str, Any]) -> set[str]:
+    turn = int(observation.get("turn", 1))
+    pending = observation.get("pending_deadlines", {})
+    return {
+        audience
+        for audience, deadline in pending.items()
+        if int(deadline) - turn <= 1
+    }
+
+
+def _turn_signal_suffix(observation: dict[str, Any], audience: str) -> str:
+    events = observation.get("events", [])
+    urgent = _urgent_audiences(observation)
+    sources = {str(event.get("source", "")).lower() for event in events}
+    event_types = {str(event.get("event_type", "")).lower() for event in events}
+
+    suffix_parts: list[str] = []
+    if audience in urgent:
+        suffix_parts.append("This notice is being issued within the current disclosure window")
+    if "false_fact" in event_types:
+        suffix_parts.append("we are relying only on verified facts and are not adopting unverified claims")
+    if audience == "press" and ("press" in sources or "journalist" in sources):
+        suffix_parts.append("we will issue timely public updates as verification completes")
+    if audience == "regulators" and "stress_event" in event_types:
+        suffix_parts.append("we will provide prompt supplemental filings if material facts change")
+    if not suffix_parts:
+        return ""
+
+    sentence = "; ".join(suffix_parts)
+    sentence = sentence[0].upper() + sentence[1:]
+    return f" {sentence}."
+
+
 def observation_state_key(observation: dict[str, Any]) -> str:
     task_name = observation["task_name"]
     turn = int(observation["turn"])
@@ -58,7 +91,12 @@ def observation_state_key(observation: dict[str, Any]) -> str:
     )
 
 
-def _build_message(task_name: str, audience: str, style: str = "balanced") -> str:
+def _build_message(
+    task_name: str,
+    audience: str,
+    style: str = "balanced",
+    observation: dict[str, Any] | None = None,
+) -> str:
     base_name = _base_task_name(task_name)
     if base_name == "data-breach":
         templates = {
@@ -84,15 +122,17 @@ def _build_message(task_name: str, audience: str, style: str = "balanced") -> st
 
     base = templates[audience]
     if style == "cautious":
-        return base.split(".")[0] + "."
+        base = base.split(".")[0] + "."
     if style == "disclose" and audience in {"regulators", "press"}:
-        return base
+        pass
     if style == "internal" and audience == "employees":
-        return base
+        pass
     if style == "safety" and audience == "customers":
-        return base
+        pass
     if style == "press" and audience == "press":
-        return base
+        pass
+    if observation is not None:
+        base = base + _turn_signal_suffix(observation, audience)
     return base
 
 
@@ -101,7 +141,10 @@ def action_from_spec(observation: dict[str, Any], action_spec: dict[str, Any]) -
     available = set(observation.get("available_audiences", []))
     style = str(action_spec.get("style", "balanced"))
     audiences = [aud for aud in action_spec.get("audiences", []) if aud in available]
-    messages = {audience: _build_message(task_name, audience, style=style) for audience in audiences}
+    messages = {
+        audience: _build_message(task_name, audience, style=style, observation=observation)
+        for audience in audiences
+    }
     return {
         "messages": messages,
         "internal_notes": f"policy={action_spec.get('name', 'unknown')} style={style}",
@@ -147,7 +190,12 @@ class StrategicPolicy:
     def action(self, observation: dict[str, Any]) -> dict[str, Any]:
         audiences = self._select_audiences(observation)
         messages = {
-            audience: _build_message(observation["task_name"], audience, style="balanced")
+            audience: _build_message(
+                observation["task_name"],
+                audience,
+                style="balanced",
+                observation=observation,
+            )
             for audience in audiences
         }
         return {

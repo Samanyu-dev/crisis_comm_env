@@ -5,6 +5,7 @@ import json
 import os
 import re
 import signal
+import time
 import sys
 import urllib.error
 import urllib.request
@@ -21,7 +22,35 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            if key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        return
+
+
 load_dotenv(ROOT_DIR / ".env")
+_load_env_file(ROOT_DIR / ".env")
 
 SERVER_DIR = ROOT_DIR / "server"
 if str(SERVER_DIR) not in sys.path:
@@ -34,10 +63,10 @@ from tasks import list_challenge_task_names, list_task_names  # noqa: E402
 
 
 BENCHMARK_NAME = "crisis-command"
-# Local app.py default. Docker/HF Spaces run the service on port 7860.
-DEFAULT_ENV_URL = "http://127.0.0.1:8000"
-DEFAULT_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-DEFAULT_MODEL_NAME = "gemini-2.0-flash"
+# Keep local/Docker/HF aligned on the same default port.
+DEFAULT_ENV_URL = "http://127.0.0.1:7860"
+DEFAULT_API_BASE_URL = "https://router.huggingface.co/v1"
+DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-72B-Instruct"
 DEFAULT_STANDARD_TASKS = list_task_names(include_challenge=False)
 DEFAULT_CHALLENGE_TASKS = list_challenge_task_names()
 SUCCESS_SCORE_THRESHOLD = 0.10
@@ -50,6 +79,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RL_POLICY_PATH = os.getenv("RL_POLICY_PATH", str(ROOT_DIR / "artifacts" / "rl_policy.json"))
 CHALLENGE_RL_POLICY_PATH = str(ROOT_DIR / "artifacts" / "rl_policy_challenge.json")
+MODEL_FALLBACKS = [
+    model.strip()
+    for model in os.getenv("MODEL_FALLBACKS", "").split(",")
+    if model.strip()
+]
 
 if hasattr(signal, "SIGPIPE"):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
@@ -121,8 +155,34 @@ def _resolve_api_key(*, explicit_key: str | None = None, api_base_url: str) -> s
     return OPENAI_API_KEY or HF_TOKEN or GEMINI_API_KEY
 
 
+def _model_candidates(primary: str) -> list[str]:
+    ordered = [primary, *MODEL_FALLBACKS]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for model in ordered:
+        if model in seen:
+            continue
+        seen.add(model)
+        deduped.append(model)
+    return deduped
+
+
+def _is_quota_or_rate_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(
+        marker in message
+        for marker in (
+            "429",
+            "resource_exhausted",
+            "quota",
+            "rate limit",
+            "retry in",
+        )
+    )
+
+
 def build_observation_prompt(observation: dict[str, Any]) -> str:
-    events = "\n".join(
+    events_text = "\n".join(
         f"- [{event['event_type']}] {event['source']}: {event['content']}"
         for event in observation.get("events", [])
     )
@@ -130,22 +190,41 @@ def build_observation_prompt(observation: dict[str, Any]) -> str:
         f"- {message['audience']}: {message['content']}"
         for message in observation.get("prior_statements", [])
     ) or "- None yet."
-    pending = "\n".join(
+    pending_text = "\n".join(
         f"- {audience}: by turn {deadline}"
         for audience, deadline in observation.get("pending_deadlines", {}).items()
     ) or "- None."
     required = "\n".join(f"- {item}" for item in observation.get("required_disclosures", []))
     forbidden = "\n".join(f"- {item}" for item in observation.get("forbidden_statements", []))
+    signals: list[str] = []
+    events = observation.get("events", [])
+    if any(event.get("event_type") == "false_fact" for event in events):
+        signals.append("- A rumor/false-claim signal arrived this turn: do not restate it as fact.")
+    if any(event.get("event_type") == "stress_event" for event in events):
+        signals.append("- Stress escalation this turn: keep language calm, specific, and legally safe.")
+    if any(str(event.get("source", "")).lower() in {"press", "journalist"} for event in events):
+        signals.append("- Press pressure is active: keep statements consistent with regulator/customer messaging.")
+    pending = observation.get("pending_deadlines", {})
+    turn = int(observation.get("turn", 1))
+    urgent = [
+        audience
+        for audience, deadline in pending.items()
+        if int(deadline) - turn <= 1
+    ]
+    if urgent:
+        signals.append(f"- Urgent deadline audiences now: {', '.join(sorted(urgent))}.")
+    signals_text = "\n".join(signals) or "- No exceptional turn-signal constraints."
 
     return (
         f"Task: {observation['task_name']} ({observation['difficulty']})\n"
         f"Turn: {observation['turn']} / {observation['max_turns']}\n"
         f"Scenario: {observation['scenario_description']}\n\n"
-        f"New events:\n{events or '- None.'}\n\n"
-        f"Pending deadlines:\n{pending}\n\n"
+        f"New events:\n{events_text or '- None.'}\n\n"
+        f"Pending deadlines:\n{pending_text}\n\n"
         f"Prior statements:\n{prior}\n\n"
         f"Required disclosures:\n{required or '- None.'}\n\n"
         f"Forbidden statements:\n{forbidden or '- None.'}\n\n"
+        f"Turn-sensitive signals:\n{signals_text}\n\n"
         "Decision rules:\n"
         "- Prioritize audiences with near deadlines first.\n"
         "- Never repeat unverified or false claims.\n"
@@ -247,7 +326,8 @@ def generate_action(
         return strategic_action_for_observation(observation)
     if policy == "llm" and not api_key:
         raise RuntimeError(
-            "LLM policy requires an API key. Set GEMINI_API_KEY (recommended for Gemini endpoint) or pass --hf-token."
+            "LLM policy requires an API key. Set HF_TOKEN (recommended for HF Router), "
+            "OPENAI_API_KEY, GEMINI_API_KEY, or pass --api-key."
         )
     if policy == "auto" and not api_key:
         return strategic_action_for_observation(observation)
@@ -256,30 +336,148 @@ def generate_action(
 
     client = OpenAI(base_url=api_base_url, api_key=api_key, timeout=60.0)
     prompt = build_observation_prompt(observation)
-    completion = client.chat.completions.create(
-        model=model_name,
-        temperature=0,
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "You are a crisis communications lead in a high-stakes simulation. "
-                    "Return only JSON. Prioritize legal/regulatory deadlines, reject rumors, "
-                    "and keep statements consistent across audiences with concrete next steps."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ],
-    )
-    content = completion.choices[0].message.content or ""
-    return parse_model_response(content)
+    last_error: Exception | None = None
+    candidates = _model_candidates(model_name)
+    for idx, candidate_model in enumerate(candidates):
+        try:
+            completion = client.chat.completions.create(
+                model=candidate_model,
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a crisis communications lead in a high-stakes simulation. "
+                            "Return only JSON. Prioritize legal/regulatory deadlines, reject rumors, "
+                            "and keep statements consistent across audiences with concrete next steps."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            content = completion.choices[0].message.content or ""
+            parsed = parse_model_response(content)
+            parsed["internal_notes"] = (
+                f"{parsed.get('internal_notes', '').strip()} model={candidate_model}"
+            ).strip()
+            if policy in {"llm", "auto"}:
+                return _adapt_action_to_observation(
+                    parsed,
+                    observation=observation,
+                    policy=policy,
+                )
+            return parsed
+        except Exception as exc:
+            last_error = exc
+            has_next = idx < len(candidates) - 1
+            if has_next and _is_quota_or_rate_error(exc):
+                time.sleep(1.0)
+                continue
+            if has_next:
+                continue
+    raise RuntimeError(str(last_error) if last_error else "LLM request failed without error details.")
 
 
 def _action_string(action: dict[str, Any]) -> str:
     audiences = sorted(action.get("messages", {}).keys())
     if not audiences:
         return "noop"
-    return f"send({'+'.join(audiences)})"
+    action_str = f"send({'+'.join(audiences)})"
+    notes = str(action.get("internal_notes", ""))
+    match = re.search(r"\bmodel=([^\s]+)", notes)
+    if match:
+        action_str = f"{action_str}[model={match.group(1)}]"
+    return action_str
+
+
+def _latest_prior_messages(observation: dict[str, Any]) -> dict[str, str]:
+    latest: dict[str, str] = {}
+    for item in observation.get("prior_statements", []):
+        audience = str(item.get("audience", "")).strip()
+        content = str(item.get("content", "")).strip()
+        if audience and content:
+            latest[audience] = _single_line(content)
+    return latest
+
+
+def _ensure_sentence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return stripped
+    if stripped.endswith((".", "!", "?")):
+        return stripped
+    return f"{stripped}."
+
+
+def _adapt_action_to_observation(
+    action: dict[str, Any],
+    *,
+    observation: dict[str, Any],
+    policy: str,
+) -> dict[str, Any]:
+    available = set(observation.get("available_audiences", []))
+    incoming = action.get("messages", {})
+    messages = {
+        str(audience): str(content).strip()
+        for audience, content in incoming.items()
+        if str(audience) in available and str(content).strip()
+    }
+    notes = str(action.get("internal_notes", "")).strip()
+    adaptation_notes: list[str] = []
+
+    if not messages:
+        fallback = strategic_action_for_observation(observation)
+        fallback["internal_notes"] = (
+            f"{notes} fallback=strategic-empty-output".strip()
+        )
+        return fallback
+
+    turn = int(observation.get("turn", 1))
+    pending = observation.get("pending_deadlines", {})
+    urgent = [
+        audience
+        for audience, deadline in pending.items()
+        if int(deadline) - turn <= 1 and audience in available
+    ]
+    if urgent:
+        strategic_messages = strategic_action_for_observation(observation).get("messages", {})
+        for audience in urgent:
+            if audience not in messages and audience in strategic_messages:
+                messages[audience] = strategic_messages[audience]
+                adaptation_notes.append(f"added_urgent={audience}")
+
+    events = observation.get("events", [])
+    has_new_signals = bool(events)
+    prior = _latest_prior_messages(observation)
+    if has_new_signals:
+        update_suffix = (
+            " Update this turn: we are incorporating newly verified information "
+            "and will continue timely disclosures."
+        )
+        for audience, content in list(messages.items()):
+            previous = prior.get(audience)
+            if previous and _single_line(content).lower() == previous.lower():
+                messages[audience] = _ensure_sentence(content) + update_suffix
+                adaptation_notes.append(f"refreshed={audience}")
+
+    press_active = any(
+        str(event.get("source", "")).lower() in {"press", "journalist"}
+        for event in events
+    )
+    if press_active and "press" in available and "press" not in messages:
+        strategic_messages = strategic_action_for_observation(observation).get("messages", {})
+        if "press" in strategic_messages:
+            messages["press"] = strategic_messages["press"]
+            adaptation_notes.append("added_press_due_to_pressure")
+
+    merged_notes = notes
+    if adaptation_notes:
+        suffix = f"adaptive[{','.join(adaptation_notes)}]"
+        merged_notes = f"{notes} {suffix}".strip()
+    if not merged_notes:
+        merged_notes = f"policy={policy}"
+
+    return {"messages": messages, "internal_notes": merged_notes}
 
 
 def log_start(task: str, env: str, model: str) -> None:
@@ -439,9 +637,10 @@ def main() -> int:
     parser.add_argument("--task-set", choices=["standard", "challenge", "all"], default="standard")
     parser.add_argument("--model", default=MODEL_NAME)
     parser.add_argument("--api-base-url", default=API_BASE_URL)
-    parser.add_argument("--hf-token", default=HF_TOKEN)
+    parser.add_argument("--hf-token", default=None)
+    parser.add_argument("--api-key", default=None)
     parser.add_argument("--rl-policy-path", default=RL_POLICY_PATH)
-    parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="auto")
+    parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="scripted")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
     resolved_tasks = resolve_tasks(tasks=args.tasks, task_set=args.task_set)
@@ -456,7 +655,7 @@ def main() -> int:
             tasks=resolved_tasks,
             api_base_url=args.api_base_url,
             model_name=args.model,
-            hf_token=args.hf_token,
+            hf_token=args.api_key or args.hf_token,
             policy=args.policy,
             rl_policy_path=resolved_rl_policy_path,
             emit_logs=True,

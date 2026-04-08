@@ -17,13 +17,41 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw_line in path.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export ") :].strip()
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                value = value[1:-1]
+            if key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        return
+
+
 load_dotenv(ROOT_DIR / ".env")
+_load_env_file(ROOT_DIR / ".env")
 
 DEFAULT_API_BASE_URL = os.getenv(
     "API_BASE_URL",
-    "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "https://router.huggingface.co/v1",
 )
-DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.0-flash")
+DEFAULT_MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 
 
 def _is_gemini_endpoint(api_base_url: str) -> bool:
