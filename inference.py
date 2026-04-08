@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import signal
 import sys
 import urllib.error
 import urllib.request
@@ -21,10 +22,15 @@ if str(SERVER_DIR) not in sys.path:
 from app import create_app  # noqa: E402
 
 
+BENCHMARK_NAME = "crisis-command"
 DEFAULT_ENV_URL = "http://127.0.0.1:8000"
 DEFAULT_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 DEFAULT_TASKS = ["data-breach", "product-recall", "executive-fraud"]
+SUCCESS_SCORE_THRESHOLD = 0.10
+
+if hasattr(signal, "SIGPIPE"):
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 
 class EnvClient:
@@ -56,20 +62,31 @@ class EnvClient:
 
             self._local_client = TestClient(create_app())
 
-    def health(self) -> dict[str, Any]:
-        return self._http_json("GET", "/health")
-
-    def tasks(self) -> dict[str, Any]:
-        return self._http_json("GET", "/tasks")
-
     def reset(self, task_name: str) -> dict[str, Any]:
         return self._http_json("POST", "/reset", {"task_name": task_name})
 
     def step(self, action: dict[str, Any]) -> dict[str, Any]:
         return self._http_json("POST", "/step", action)
 
-    def state(self) -> dict[str, Any]:
-        return self._http_json("GET", "/state")
+
+def _single_line(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip())
+
+
+def _emit(line: str) -> None:
+    try:
+        print(line, flush=True)
+    except BrokenPipeError:
+        raise SystemExit(0)
+
+
+def _resolve_api_key(explicit_key: str | None = None) -> str | None:
+    return (
+        explicit_key
+        or os.getenv("HF_TOKEN")
+        or os.getenv("OPENAI_API_KEY")
+        or os.getenv("GEMINI_API_KEY")
+    )
 
 
 def build_observation_prompt(observation: dict[str, Any]) -> str:
@@ -162,13 +179,13 @@ def generate_action(
     *,
     api_base_url: str,
     model_name: str,
-    hf_token: str | None,
+    api_key: str | None,
     policy: str,
 ) -> dict[str, Any]:
-    if policy == "scripted" or not hf_token:
+    if policy == "scripted" or (policy == "auto" and not api_key) or not api_key:
         return scripted_action_for_observation(observation)
 
-    client = OpenAI(base_url=api_base_url, api_key=hf_token, timeout=60.0)
+    client = OpenAI(base_url=api_base_url, api_key=api_key, timeout=60.0)
     prompt = build_observation_prompt(observation)
     completion = client.chat.completions.create(
         model=model_name,
@@ -188,34 +205,30 @@ def generate_action(
     return parse_model_response(content)
 
 
-def format_start_line(task_name: str, observation: dict[str, Any], policy: str) -> str:
-    payload = {
-        "task": task_name,
-        "difficulty": observation["difficulty"],
-        "max_turns": observation["max_turns"],
-        "policy": policy,
-    }
-    return f"START {json.dumps(payload, sort_keys=True)}"
+def _action_string(action: dict[str, Any]) -> str:
+    audiences = sorted(action.get("messages", {}).keys())
+    if not audiences:
+        return "noop"
+    return f"send({'+'.join(audiences)})"
 
 
-def format_step_line(task_name: str, turn: int, reward: float, done: bool, action: dict[str, Any]) -> str:
-    payload = {
-        "task": task_name,
-        "turn": turn,
-        "reward": round(reward, 4),
-        "done": done,
-        "audiences": sorted(action.get("messages", {}).keys()),
-    }
-    return f"STEP {json.dumps(payload, sort_keys=True)}"
+def log_start(task: str, env: str, model: str) -> None:
+    _emit(f"[START] task={task} env={env} model={model}")
 
 
-def format_end_line(task_name: str, turns: int, final_score: float) -> str:
-    payload = {
-        "task": task_name,
-        "turns": turns,
-        "final_score": round(final_score, 4),
-    }
-    return f"END {json.dumps(payload, sort_keys=True)}"
+def log_step(step: int, action: str, reward: float, done: bool, error: str | None) -> None:
+    error_value = _single_line(error) if error else "null"
+    _emit(
+        f"[STEP] step={step} action={action} reward={reward:.2f} "
+        f"done={str(done).lower()} error={error_value}"
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: list[float]) -> None:
+    rewards_str = ",".join(f"{reward:.2f}" for reward in rewards)
+    _emit(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}"
+    )
 
 
 def run_episode(
@@ -224,52 +237,77 @@ def run_episode(
     task_name: str,
     api_base_url: str,
     model_name: str,
-    hf_token: str | None,
+    api_key: str | None,
     policy: str,
     emit_logs: bool = True,
 ) -> dict[str, Any]:
-    reset = client.reset(task_name)
-    observation = reset["observation"]
+    rewards: list[float] = []
     episode_log: list[dict[str, Any]] = []
+    steps_taken = 0
+    final_score = 0.0
+    success = False
 
     if emit_logs:
-        print(format_start_line(task_name, observation, policy))
+        log_start(task=task_name, env=BENCHMARK_NAME, model=model_name)
 
-    while not observation.get("done", False):
-        action = generate_action(
-            observation,
-            api_base_url=api_base_url,
-            model_name=model_name,
-            hf_token=hf_token,
-            policy=policy,
-        )
-        turn = observation["turn"]
-        step_result = client.step(action)
-        episode_log.append(
-            {
-                "turn": turn,
-                "reward": step_result["reward"],
-                "done": step_result["done"],
-                "messages": action["messages"],
-                "info": step_result["info"],
-            }
-        )
+    try:
+        reset = client.reset(task_name)
+        observation = reset["observation"]
+
+        while not observation.get("done", False):
+            step_number = observation["turn"]
+            error_message: str | None = None
+            reward_value = 0.0
+            done = True
+
+            try:
+                action = generate_action(
+                    observation,
+                    api_base_url=api_base_url,
+                    model_name=model_name,
+                    api_key=api_key,
+                    policy=policy,
+                )
+                action_str = _action_string(action)
+                step_result = client.step(action)
+                reward_value = float(step_result["reward"])
+                done = bool(step_result["done"])
+                observation = step_result["observation"]
+                episode_log.append(
+                    {
+                        "turn": step_number,
+                        "reward": reward_value,
+                        "done": done,
+                        "messages": action["messages"],
+                        "info": step_result["info"],
+                    }
+                )
+            except Exception as exc:
+                action = {"messages": {}, "internal_notes": ""}
+                action_str = "error"
+                error_message = str(exc)
+                done = True
+
+            rewards.append(reward_value)
+            steps_taken = step_number
+            if emit_logs:
+                log_step(step=step_number, action=action_str, reward=reward_value, done=done, error=error_message)
+            if done:
+                break
+
+        final_score = rewards[-1] if rewards else 0.0
+        success = final_score >= SUCCESS_SCORE_THRESHOLD
+        return {
+            "task_name": task_name,
+            "turns": steps_taken,
+            "final_score": final_score,
+            "episode_log": episode_log,
+            "success": success,
+            "rewards": rewards,
+        }
+    finally:
         if emit_logs:
-            print(format_step_line(task_name, turn, step_result["reward"], step_result["done"], action))
-        observation = step_result["observation"]
-        if step_result["done"]:
-            break
-
-    final_score = episode_log[-1]["reward"] if episode_log else 0.0
-    if emit_logs:
-        print(format_end_line(task_name, len(episode_log), final_score))
-
-    return {
-        "task_name": task_name,
-        "turns": len(episode_log),
-        "final_score": final_score,
-        "episode_log": episode_log,
-    }
+            log_end(success=success, steps=steps_taken, score=final_score, rewards=rewards)
 
 
 def run_all_tasks(
@@ -283,6 +321,7 @@ def run_all_tasks(
     emit_logs: bool = True,
 ) -> dict[str, dict[str, Any]]:
     client = EnvClient(env_url)
+    api_key = _resolve_api_key(hf_token)
     results: dict[str, dict[str, Any]] = {}
     for task_name in tasks:
         results[task_name] = run_episode(
@@ -290,7 +329,7 @@ def run_all_tasks(
             task_name=task_name,
             api_base_url=api_base_url,
             model_name=model_name,
-            hf_token=hf_token,
+            api_key=api_key,
             policy=policy,
             emit_logs=emit_logs,
         )
@@ -304,7 +343,7 @@ def main() -> int:
     parser.add_argument("--model", default=os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME))
     parser.add_argument("--api-base-url", default=os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL))
     parser.add_argument("--hf-token", default=os.getenv("HF_TOKEN"))
-    parser.add_argument("--policy", choices=["scripted", "llm"], default="scripted")
+    parser.add_argument("--policy", choices=["auto", "scripted", "llm"], default="auto")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
 
@@ -318,12 +357,11 @@ def main() -> int:
             policy=args.policy,
             emit_logs=True,
         )
-    except Exception as exc:
-        print(f"RUN_ERROR {exc}")
+    except Exception:
         return 1
 
     if args.summary_json:
-        print(json.dumps(results, indent=2, sort_keys=True))
+        _emit(json.dumps(results, indent=2, sort_keys=True))
 
     return 0
 

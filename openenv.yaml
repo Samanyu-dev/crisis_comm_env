@@ -1,6 +1,9 @@
 name: crisis-command
-version: 0.1.0
-description: Crisis communication environment with graded multi-audience response tasks.
+version: "1.0.0"
+description: >
+  Multi-turn crisis communication environment where an agent manages
+  unfolding real-world incidents across employees, customers, regulators,
+  and press while handling false information, deadlines, and consistency risk.
 runtime:
   type: python
   working_dir: server

@@ -384,9 +384,9 @@ def check_phase_5_inference() -> list[str]:
     print(output)
     print("scores:", {task: round(result["final_score"], 4) for task, result in results.items()})
     print()
-    errors += _assert(output.count("START ") == 3, "Inference output is missing START lines")
-    errors += _assert(output.count("STEP ") >= 3, "Inference output is missing STEP lines")
-    errors += _assert(output.count("END ") == 3, "Inference output is missing END lines")
+    errors += _assert(output.count("[START] ") == 3, "Inference output is missing START lines")
+    errors += _assert(output.count("[STEP] ") >= 3, "Inference output is missing STEP lines")
+    errors += _assert(output.count("[END] ") == 3, "Inference output is missing END lines")
     errors += _assert(
         0.55 <= results["data-breach"]["final_score"] <= 0.65,
         f"data-breach baseline out of range ({results['data-breach']['final_score']:.4f})",
