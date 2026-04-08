@@ -47,7 +47,8 @@ run_with_timeout() {
   else
     "$@" &
     local pid=$!
-    ( sleep "$secs" && kill "$pid" 2>/dev/null ) &
+    # Close watcher output so it does not hold pipeline FDs open.
+    ( sleep "$secs" && kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
     local watcher=$!
     wait "$pid" 2>/dev/null
     local rc=$?
@@ -105,11 +106,23 @@ printf "\n"
 
 log "${BOLD}Step 1/3: Pinging HF Space${NC} ($PING_URL/reset) ..."
 
-CURL_OUTPUT=$(portable_mktemp "validate-curl")
-CLEANUP_FILES+=("$CURL_OUTPUT")
-HTTP_CODE=$(curl -s -o "$CURL_OUTPUT" -w "%{http_code}" -X POST \
-  -H "Content-Type: application/json" -d '{}' \
-  "$PING_URL/reset" --max-time 30 2>"$CURL_OUTPUT" || printf "000")
+CURL_BODY=$(portable_mktemp "validate-curl-body")
+CURL_ERR=$(portable_mktemp "validate-curl-err")
+CLEANUP_FILES+=("$CURL_BODY" "$CURL_ERR")
+HTTP_CODE="000"
+CURL_RC=1
+
+for attempt in 1 2 3; do
+  HTTP_CODE=$(curl -s -o "$CURL_BODY" -w "%{http_code}" -X POST \
+    -H "Content-Type: application/json" -d '{}' \
+    "$PING_URL/reset" --max-time 30 2>"$CURL_ERR")
+  CURL_RC=$?
+
+  if [ "$CURL_RC" -eq 0 ] && [ "$HTTP_CODE" = "200" ]; then
+    break
+  fi
+  sleep 2
+done
 
 if [ "$HTTP_CODE" = "200" ]; then
   pass "HF Space is live and responds to /reset"
@@ -145,13 +158,18 @@ fi
 log "  Found Dockerfile in $DOCKER_CONTEXT"
 
 BUILD_OK=false
-BUILD_OUTPUT=$(run_with_timeout "$DOCKER_BUILD_TIMEOUT" docker build "$DOCKER_CONTEXT" 2>&1) && BUILD_OK=true
+BUILD_LOG=$(portable_mktemp "validate-build")
+CLEANUP_FILES+=("$BUILD_LOG")
+
+if run_with_timeout "$DOCKER_BUILD_TIMEOUT" docker build --progress=plain "$DOCKER_CONTEXT" 2>&1 | tee "$BUILD_LOG"; then
+  BUILD_OK=true
+fi
 
 if [ "$BUILD_OK" = true ]; then
   pass "Docker build succeeded"
 else
   fail "Docker build failed (timeout=${DOCKER_BUILD_TIMEOUT}s)"
-  printf "%s\n" "$BUILD_OUTPUT" | tail -20
+  tail -20 "$BUILD_LOG"
   stop_at "Step 2"
 fi
 
@@ -164,14 +182,18 @@ if ! command -v openenv &>/dev/null; then
 fi
 
 VALIDATE_OK=false
-VALIDATE_OUTPUT=$(cd "$REPO_DIR" && openenv validate 2>&1) && VALIDATE_OK=true
+VALIDATE_LOG=$(portable_mktemp "validate-openenv")
+CLEANUP_FILES+=("$VALIDATE_LOG")
+
+if (cd "$REPO_DIR" && openenv validate 2>&1) | tee "$VALIDATE_LOG"; then
+  VALIDATE_OK=true
+fi
 
 if [ "$VALIDATE_OK" = true ]; then
   pass "openenv validate passed"
-  [ -n "$VALIDATE_OUTPUT" ] && log "  $VALIDATE_OUTPUT"
 else
   fail "openenv validate failed"
-  printf "%s\n" "$VALIDATE_OUTPUT"
+  cat "$VALIDATE_LOG"
   stop_at "Step 3"
 fi
 
