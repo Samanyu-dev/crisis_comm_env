@@ -4,10 +4,15 @@ import argparse
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
+from dotenv import load_dotenv
 
+
+ROOT_DIR = Path(__file__).resolve().parent
+load_dotenv(ROOT_DIR / ".env")
 
 DEFAULT_API_BASE_URL = os.getenv(
     "API_BASE_URL",

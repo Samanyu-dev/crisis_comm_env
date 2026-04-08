@@ -11,10 +11,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from openai import OpenAI
 
 
 ROOT_DIR = Path(__file__).resolve().parent
+load_dotenv(ROOT_DIR / ".env")
+
 SERVER_DIR = ROOT_DIR / "server"
 if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
@@ -138,6 +141,11 @@ def build_observation_prompt(observation: dict[str, Any]) -> str:
         f"Prior statements:\n{prior}\n\n"
         f"Required disclosures:\n{required or '- None.'}\n\n"
         f"Forbidden statements:\n{forbidden or '- None.'}\n\n"
+        "Decision rules:\n"
+        "- Prioritize audiences with near deadlines first.\n"
+        "- Never repeat unverified or false claims.\n"
+        "- Keep cross-audience consistency.\n"
+        "- Include concrete actions and next steps.\n\n"
         "Respond with strict JSON: "
         '{"messages":{"regulators":"...","employees":"...","customers":"...","press":"..."},'
         '"internal_notes":"..."}'
@@ -232,6 +240,10 @@ def generate_action(
         if rl_policy is not None:
             return rl_policy.action(observation)
         return strategic_action_for_observation(observation)
+    if policy == "llm" and not api_key:
+        raise RuntimeError(
+            "LLM policy requires an API key. Set GEMINI_API_KEY (recommended for Gemini endpoint) or pass --hf-token."
+        )
     if policy == "auto" and not api_key:
         return strategic_action_for_observation(observation)
     if not api_key:
@@ -246,8 +258,9 @@ def generate_action(
             {
                 "role": "system",
                 "content": (
-                    "You are acting inside a crisis communication simulator. "
-                    "Return only JSON with audience-specific messages and brief internal notes."
+                    "You are a crisis communications lead in a high-stakes simulation. "
+                    "Return only JSON. Prioritize legal/regulatory deadlines, reject rumors, "
+                    "and keep statements consistent across audiences with concrete next steps."
                 ),
             },
             {"role": "user", "content": prompt},

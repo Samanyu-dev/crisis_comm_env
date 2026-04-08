@@ -2,6 +2,8 @@
 
 This file is a quick command reference for local development, validation, Docker, Hugging Face Space, and agent training/evaluation.
 
+Note: `inference.py` and `api_diagnostics.py` auto-load `/Users/apple/crisis_comm_env/.env`.
+
 ## 1) Initial Setup
 
 ```bash

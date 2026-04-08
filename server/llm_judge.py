@@ -7,7 +7,10 @@ import re
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 def _normalize_text(text: str) -> str:

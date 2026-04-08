@@ -116,6 +116,8 @@ Environment variables:
 - `HF_TOKEN`: hackathon-required variable; preferred for HF router endpoints
 - `OPENAI_API_KEY`: fallback for other OpenAI-compatible providers
 
+`inference.py` and `api_diagnostics.py` auto-load `.env` from the repo root.
+
 ## Local run
 
 ```bash
