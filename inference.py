@@ -94,13 +94,23 @@ def _emit(line: str) -> None:
         raise SystemExit(0)
 
 
-def _resolve_api_key(explicit_key: str | None = None) -> str | None:
-    return (
-        explicit_key
-        or HF_TOKEN
-        or OPENAI_API_KEY
-        or GEMINI_API_KEY
-    )
+def _is_gemini_endpoint(api_base_url: str) -> bool:
+    return "generativelanguage.googleapis.com" in api_base_url.lower()
+
+
+def _is_hf_router_endpoint(api_base_url: str) -> bool:
+    lowered = api_base_url.lower()
+    return "router.huggingface.co" in lowered or "api-inference.huggingface.co" in lowered
+
+
+def _resolve_api_key(*, explicit_key: str | None = None, api_base_url: str) -> str | None:
+    if explicit_key:
+        return explicit_key
+    if _is_gemini_endpoint(api_base_url):
+        return GEMINI_API_KEY or OPENAI_API_KEY or HF_TOKEN
+    if _is_hf_router_endpoint(api_base_url):
+        return HF_TOKEN or OPENAI_API_KEY or GEMINI_API_KEY
+    return OPENAI_API_KEY or HF_TOKEN or GEMINI_API_KEY
 
 
 def build_observation_prompt(observation: dict[str, Any]) -> str:
@@ -366,7 +376,7 @@ def run_all_tasks(
     emit_logs: bool = True,
 ) -> dict[str, dict[str, Any]]:
     client = EnvClient(env_url)
-    api_key = _resolve_api_key(hf_token)
+    api_key = _resolve_api_key(explicit_key=hf_token, api_base_url=api_base_url)
     rl_policy = load_rl_policy(rl_policy_path)
     results: dict[str, dict[str, Any]] = {}
     for task_name in tasks:

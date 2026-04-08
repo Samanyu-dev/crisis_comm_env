@@ -18,6 +18,28 @@ def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
     return max(lower, min(upper, value))
 
 
+def _is_gemini_endpoint(api_base_url: str) -> bool:
+    return "generativelanguage.googleapis.com" in api_base_url.lower()
+
+
+def _is_hf_router_endpoint(api_base_url: str) -> bool:
+    lowered = api_base_url.lower()
+    return "router.huggingface.co" in lowered or "api-inference.huggingface.co" in lowered
+
+
+def _resolve_api_key(api_base_url: str, explicit: str | None = None) -> str | None:
+    if explicit:
+        return explicit
+    openai_key = os.getenv("OPENAI_API_KEY")
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    hf_key = os.getenv("HF_TOKEN")
+    if _is_gemini_endpoint(api_base_url):
+        return gemini_key or openai_key or hf_key
+    if _is_hf_router_endpoint(api_base_url):
+        return hf_key or openai_key or gemini_key
+    return openai_key or hf_key or gemini_key
+
+
 class LLMJudge:
     """Cached audience-fit and coherence judge with deterministic fallback."""
 
@@ -32,7 +54,7 @@ class LLMJudge:
         self.api_base_url = api_base_url or os.getenv(
             "API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
         )
-        self.api_key = api_key or os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("HF_TOKEN")
+        self.api_key = _resolve_api_key(self.api_base_url, explicit=api_key)
         self.model_name = model_name or os.getenv("MODEL_NAME", "gemini-2.0-flash")
         self._cache = self._load_cache()
 

@@ -89,6 +89,7 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 - [agent_policy.py](/Users/apple/crisis_comm_env/agent_policy.py): strategic multi-audience policy + RL action library
 - [train_rl.py](/Users/apple/crisis_comm_env/train_rl.py): policy-gradient training loop that learns a table policy from environment rewards
 - [evaluate_agent.py](/Users/apple/crisis_comm_env/evaluate_agent.py): quick benchmark runner across standard/challenge task sets
+- `api_diagnostics.py`: probes `/models` and `/chat/completions` with latency and rate-limit header snapshots
 - `artifacts/rl_policy.json`: trained RL policy artifact consumed by `inference.py --policy rl`
 - [openenv.yaml](/Users/apple/crisis_comm_env/openenv.yaml): OpenEnv metadata
 - [server/app.py](/Users/apple/crisis_comm_env/server/app.py): FastAPI application
@@ -111,9 +112,9 @@ Environment variables:
 
 - `API_BASE_URL`: defaults to the Gemini OpenAI-compatible endpoint
 - `MODEL_NAME`: defaults to `gemini-2.0-flash`
-- `HF_TOKEN`: primary API key variable used by the inference script
-- `OPENAI_API_KEY`: supported fallback for OpenAI-compatible providers
-- `GEMINI_API_KEY`: supported fallback for Gemini local setups
+- `GEMINI_API_KEY`: preferred key when using Gemini endpoint
+- `HF_TOKEN`: hackathon-required variable; preferred for HF router endpoints
+- `OPENAI_API_KEY`: fallback for other OpenAI-compatible providers
 
 ## Local run
 
@@ -186,6 +187,14 @@ Compare policy quality quickly:
 
 ```bash
 python evaluate_agent.py --policies strategic rl --task-sets standard challenge
+```
+
+## API diagnostics
+
+Inspect endpoint status, latency, and any returned rate-limit headers:
+
+```bash
+python api_diagnostics.py
 ```
 
 Recent local runs:

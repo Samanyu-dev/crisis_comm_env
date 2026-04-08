@@ -7,3 +7,4 @@ __pycache__/
 *.py[cod]
 .llm_judge_cache.json
 .DS_Store
+artifacts/rl_policy_challenge_s*.json

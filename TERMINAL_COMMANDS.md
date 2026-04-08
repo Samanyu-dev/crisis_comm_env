@@ -84,7 +84,7 @@ LLM policy (OpenAI-compatible, Gemini/OpenRouter/etc):
 ```bash
 export API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
 export MODEL_NAME="gemini-2.0-flash"
-export HF_TOKEN="YOUR_TOKEN"
+export GEMINI_API_KEY="YOUR_GEMINI_KEY"
 python3.10 inference.py --policy llm
 ```
 
@@ -156,7 +156,24 @@ Challenge only:
 python3.10 evaluate_agent.py --policies strategic rl --task-sets challenge
 ```
 
-## 9) Hugging Face Space Logs
+## 9) API Diagnostics (Rate-limit / latency / headers)
+
+Probe active endpoint and print status/latency plus rate-limit headers (if provider returns them):
+
+```bash
+python3.10 api_diagnostics.py
+```
+
+Gemini explicit probe:
+
+```bash
+export API_BASE_URL="https://generativelanguage.googleapis.com/v1beta/openai/"
+export MODEL_NAME="gemini-2.0-flash"
+export GEMINI_API_KEY="YOUR_GEMINI_KEY"
+python3.10 api_diagnostics.py
+```
+
+## 10) Hugging Face Space Logs
 
 Container logs:
 
@@ -174,14 +191,14 @@ curl -N \
   "https://huggingface.co/api/spaces/Sammy1808/crisis_comm/logs/build"
 ```
 
-## 10) Submission Validation
+## 11) Submission Validation
 
 ```bash
 cd /Users/apple/crisis_comm_env
 bash validate-submission.sh https://sammy1808-crisis-comm.hf.space .
 ```
 
-## 11) Git Commit + Push
+## 12) Git Commit + Push
 
 ```bash
 cd /Users/apple/crisis_comm_env
@@ -191,7 +208,7 @@ git push origin main
 git push hf-space main
 ```
 
-## 12) Handy Quick Checks
+## 13) Handy Quick Checks
 
 Show task lists (standard vs challenge):
 
@@ -203,7 +220,7 @@ Syntax check key files:
 
 ```bash
 python3.10 -m py_compile \
-  inference.py train_rl.py evaluate_agent.py agent_policy.py \
+  inference.py train_rl.py evaluate_agent.py api_diagnostics.py agent_policy.py \
   server/app.py server/tasks.py server/crisis_data.py \
   server/environment.py server/grader.py server/models.py
 ```
