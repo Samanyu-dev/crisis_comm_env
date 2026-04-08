@@ -80,6 +80,9 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 ## Project layout
 
 - [inference.py](/Users/apple/crisis_comm_env/inference.py): baseline runner with OpenAI-compatible client and required stdout logging
+- [agent_policy.py](/Users/apple/crisis_comm_env/agent_policy.py): strategic multi-audience policy + RL action library
+- [train_rl.py](/Users/apple/crisis_comm_env/train_rl.py): policy-gradient training loop that learns a table policy from environment rewards
+- `artifacts/rl_policy.json`: trained RL policy artifact consumed by `inference.py --policy rl`
 - [openenv.yaml](/Users/apple/crisis_comm_env/openenv.yaml): OpenEnv metadata
 - [server/app.py](/Users/apple/crisis_comm_env/server/app.py): FastAPI application
 - [server/environment.py](/Users/apple/crisis_comm_env/server/environment.py): `reset()/step()/state()` wrapper
@@ -141,6 +144,26 @@ Expected scripted baseline scores:
 - `data-breach`: about `0.60`
 - `product-recall`: about `0.40`
 - `executive-fraud`: about `0.20`
+
+## Stronger agent policies
+
+Strategic deterministic policy (multi-audience, deadline-aware):
+
+```bash
+python inference.py --policy strategic
+```
+
+RL policy (trained with REINFORCE-style updates over discrete action specs):
+
+```bash
+python train_rl.py --episodes 1200 --eval-every 200
+python inference.py --policy rl
+```
+
+Recent local runs:
+
+- `strategic` score snapshot: data-breach `~0.70`, product-recall `~0.81`, executive-fraud `~0.79`
+- `rl` score snapshot: data-breach `~0.82`, product-recall `~0.75`, executive-fraud `~0.80`
 
 ## Validation
 

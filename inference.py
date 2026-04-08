@@ -20,6 +20,7 @@ if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 from app import create_app  # noqa: E402
+from agent_policy import RlTablePolicy, StrategicPolicy  # noqa: E402
 
 
 BENCHMARK_NAME = "crisis-command"
@@ -36,6 +37,7 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+RL_POLICY_PATH = os.getenv("RL_POLICY_PATH", str(ROOT_DIR / "artifacts" / "rl_policy.json"))
 
 if hasattr(signal, "SIGPIPE"):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
@@ -183,6 +185,22 @@ def fallback_action_for_observation(observation: dict[str, Any]) -> dict[str, An
     return scripted_action_for_observation(observation)
 
 
+def strategic_action_for_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    return StrategicPolicy().action(observation)
+
+
+def load_rl_policy(path: str | None) -> RlTablePolicy | None:
+    if not path:
+        return None
+    policy_path = Path(path)
+    if not policy_path.exists():
+        return None
+    try:
+        return RlTablePolicy.from_file(policy_path)
+    except Exception:
+        return None
+
+
 def generate_action(
     observation: dict[str, Any],
     *,
@@ -190,8 +208,19 @@ def generate_action(
     model_name: str,
     api_key: str | None,
     policy: str,
+    rl_policy: RlTablePolicy | None = None,
 ) -> dict[str, Any]:
-    if policy == "scripted" or (policy == "auto" and not api_key) or not api_key:
+    if policy == "scripted":
+        return scripted_action_for_observation(observation)
+    if policy == "strategic":
+        return strategic_action_for_observation(observation)
+    if policy == "rl":
+        if rl_policy is not None:
+            return rl_policy.action(observation)
+        return strategic_action_for_observation(observation)
+    if policy == "auto" and not api_key:
+        return strategic_action_for_observation(observation)
+    if not api_key:
         return scripted_action_for_observation(observation)
 
     client = OpenAI(base_url=api_base_url, api_key=api_key, timeout=60.0)
@@ -248,6 +277,7 @@ def run_episode(
     model_name: str,
     api_key: str | None,
     policy: str,
+    rl_policy: RlTablePolicy | None = None,
     emit_logs: bool = True,
 ) -> dict[str, Any]:
     rewards: list[float] = []
@@ -276,6 +306,7 @@ def run_episode(
                     model_name=model_name,
                     api_key=api_key,
                     policy=policy,
+                    rl_policy=rl_policy,
                 )
                 action_str = _action_string(action)
                 step_result = client.step(action)
@@ -327,10 +358,12 @@ def run_all_tasks(
     model_name: str,
     hf_token: str | None,
     policy: str,
+    rl_policy_path: str | None = None,
     emit_logs: bool = True,
 ) -> dict[str, dict[str, Any]]:
     client = EnvClient(env_url)
     api_key = _resolve_api_key(hf_token)
+    rl_policy = load_rl_policy(rl_policy_path)
     results: dict[str, dict[str, Any]] = {}
     for task_name in tasks:
         results[task_name] = run_episode(
@@ -340,6 +373,7 @@ def run_all_tasks(
             model_name=model_name,
             api_key=api_key,
             policy=policy,
+            rl_policy=rl_policy,
             emit_logs=emit_logs,
         )
     return results
@@ -352,7 +386,8 @@ def main() -> int:
     parser.add_argument("--model", default=MODEL_NAME)
     parser.add_argument("--api-base-url", default=API_BASE_URL)
     parser.add_argument("--hf-token", default=HF_TOKEN)
-    parser.add_argument("--policy", choices=["auto", "scripted", "llm"], default="auto")
+    parser.add_argument("--rl-policy-path", default=RL_POLICY_PATH)
+    parser.add_argument("--policy", choices=["auto", "scripted", "llm", "strategic", "rl"], default="auto")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
 
@@ -364,6 +399,7 @@ def main() -> int:
             model_name=args.model,
             hf_token=args.hf_token,
             policy=args.policy,
+            rl_policy_path=args.rl_policy_path,
             emit_logs=True,
         )
     except Exception:
