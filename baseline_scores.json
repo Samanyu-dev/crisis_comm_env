@@ -1,0 +1,126 @@
+{
+  "generated_by": "python3.10 evaluate_agent.py --policies scripted strategic rl --task-sets standard challenge",
+  "results": [
+    {
+      "average_score": 0.4076,
+      "final_scores": {
+        "data-breach": 0.604,
+        "executive-fraud": 0.2188,
+        "product-recall": 0.4
+      },
+      "policy": "scripted",
+      "task_set": "standard",
+      "tasks": [
+        "data-breach",
+        "product-recall",
+        "executive-fraud"
+      ]
+    },
+    {
+      "average_score": 0.3543,
+      "final_scores": {
+        "data-breach-challenge": 0.444,
+        "executive-fraud-challenge": 0.2188,
+        "product-recall-challenge": 0.4
+      },
+      "policy": "scripted",
+      "task_set": "challenge",
+      "tasks": [
+        "data-breach-challenge",
+        "product-recall-challenge",
+        "executive-fraud-challenge"
+      ]
+    },
+    {
+      "average_score": 0.7661,
+      "final_scores": {
+        "data-breach": 0.6951,
+        "executive-fraud": 0.7894,
+        "product-recall": 0.8137
+      },
+      "policy": "strategic",
+      "task_set": "standard",
+      "tasks": [
+        "data-breach",
+        "product-recall",
+        "executive-fraud"
+      ]
+    },
+    {
+      "average_score": 0.7327,
+      "final_scores": {
+        "data-breach-challenge": 0.5951,
+        "executive-fraud-challenge": 0.7894,
+        "product-recall-challenge": 0.8137
+      },
+      "policy": "strategic",
+      "task_set": "challenge",
+      "tasks": [
+        "data-breach-challenge",
+        "product-recall-challenge",
+        "executive-fraud-challenge"
+      ]
+    },
+    {
+      "average_score": 0.7915,
+      "final_scores": {
+        "data-breach": 0.8176,
+        "executive-fraud": 0.8026,
+        "product-recall": 0.7544
+      },
+      "policy": "rl",
+      "task_set": "standard",
+      "tasks": [
+        "data-breach",
+        "product-recall",
+        "executive-fraud"
+      ]
+    },
+    {
+      "average_score": 0.7832,
+      "final_scores": {
+        "data-breach-challenge": 0.7176,
+        "executive-fraud-challenge": 0.8026,
+        "product-recall-challenge": 0.8294
+      },
+      "policy": "rl",
+      "task_set": "challenge",
+      "tasks": [
+        "data-breach-challenge",
+        "product-recall-challenge",
+        "executive-fraud-challenge"
+      ]
+    }
+  ],
+  "variance_check": {
+    "data-breach": {
+      "bad": 0.1,
+      "ok": 0.6947,
+      "good": 0.9141
+    },
+    "product-recall": {
+      "bad": 0.2356,
+      "ok": 0.5151,
+      "good": 0.8625
+    },
+    "executive-fraud": {
+      "bad": 0.1,
+      "ok": 0.8451,
+      "good": 0.9381
+    }
+  },
+  "anti_gaming_checks": {
+    "copy_paste_data_breach": {
+      "score": 0.1,
+      "exploit_penalty": 0.15
+    },
+    "false_fact_data_breach": {
+      "score": 0.1635,
+      "exploit_penalty": 0.3
+    },
+    "all_hedging_executive_fraud": {
+      "score": 0.1,
+      "exploit_penalty": 0.25
+    }
+  }
+}

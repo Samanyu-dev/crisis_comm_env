@@ -28,6 +28,12 @@ This is meant to model a real communications job rather than a toy benchmark. Th
 - Reward shaping: the grader gives useful partial credit instead of only end-of-episode success.
 - Difficulty progression: easy, medium, and hard tasks stress different communication and reasoning failures.
 
+## Why this is different
+
+- Multi-audience consistency ledger: every statement is persisted and later contradictions are penalized.
+- Adversarial turn stream: true updates, false facts, stakeholder pressure, and stress events all alter policy requirements turn-by-turn.
+- Deterministic anti-exploit scoring: copy-paste messaging, blank outputs, hedging-only behavior, and false-fact repetition are explicitly penalized or capped.
+
 ## Task set
 
 - `data-breach` (`easy`): cloud SaaS data exposure with GDPR disclosure pressure.
@@ -84,6 +90,52 @@ The grader is deterministic and penalizes blank statements, copy-paste messaging
 | Baseline reproducibility (`--policy scripted`) | `data-breach ~0.60`, `product-recall ~0.40`, `executive-fraud ~0.20` |
 | Interface compliance | `step/reset/state` endpoints + typed Pydantic models |
 | Deployment gates | `openenv validate` + `validate-submission.sh` pass |
+
+## Baseline results
+
+Scores below were produced from committed scripts and can be regenerated locally.
+
+| Policy | Task set | data-breach | product-recall | executive-fraud | average |
+|---|---|---:|---:|---:|---:|
+| scripted | standard | 0.6040 | 0.4000 | 0.2188 | 0.4076 |
+| strategic | standard | 0.6951 | 0.8137 | 0.7894 | 0.7661 |
+| rl | standard | 0.8176 | 0.7544 | 0.8026 | 0.7915 |
+
+Challenge variants:
+
+| Policy | Task set | data-breach-challenge | product-recall-challenge | executive-fraud-challenge | average |
+|---|---|---:|---:|---:|---:|
+| scripted | challenge | 0.4440 | 0.4000 | 0.2188 | 0.3543 |
+| strategic | challenge | 0.5951 | 0.8137 | 0.7894 | 0.7327 |
+| rl | challenge | 0.7176 | 0.8294 | 0.8026 | 0.7832 |
+
+Committed artifact: `baseline_scores.json`.
+
+## Grading formula
+
+Per-turn score:
+
+`total = clamp(0, 1, weighted_sum - exploit_penalty)` where
+
+- `weighted_sum = 0.30*factual_accuracy + 0.20*audience_alignment + 0.15*timeliness + 0.15*consistency + 0.10*legal_safety + 0.10*proactive_disclosure`
+- exploit penalties include blank statements, cross-audience copy-paste, false-fact repetition, contradictions, keyword stuffing, schema stuffing, and non-adaptive repeated messaging
+- hard caps:
+  - missed regulatory deadline caps score at `0.40`
+  - all-hedging behavior caps score at `0.10`
+
+## Anti-gaming checks (deterministic)
+
+Observed outputs from grader probes:
+
+| Case | Scenario | Score | Exploit penalty | Expected behavior |
+|---|---|---:|---:|---|
+| identical copy-paste to all audiences | data-breach | 0.1000 | 0.1500 | heavily penalized |
+| repeated false facts | data-breach | 0.1635 | 0.3000 | heavily penalized |
+| all hedging / no concrete action | executive-fraud | 0.1000 | 0.2500 | score capped |
+
+## Phase 2 rerun note
+
+`inference.py` defaults to `--policy scripted` for deterministic baseline reproduction. Stronger policies (`strategic`, `rl`) are included for agent-quality benchmarking and challenge-task stress tests.
 
 ## API
 
