@@ -7,8 +7,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from openai import OpenAI
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 

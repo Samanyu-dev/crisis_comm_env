@@ -11,8 +11,13 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from openai import OpenAI
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
 
 
 ROOT_DIR = Path(__file__).resolve().parent

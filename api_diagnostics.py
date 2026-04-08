@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:  # pragma: no cover - optional dependency fallback
+    def load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
 
 
 ROOT_DIR = Path(__file__).resolve().parent
