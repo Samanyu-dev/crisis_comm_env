@@ -29,6 +29,13 @@ DEFAULT_MODEL_NAME = "gemini-2.0-flash"
 DEFAULT_TASKS = ["data-breach", "product-recall", "executive-fraud"]
 SUCCESS_SCORE_THRESHOLD = 0.10
 
+API_BASE_URL = os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL)
+MODEL_NAME = os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME)
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 if hasattr(signal, "SIGPIPE"):
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
@@ -83,9 +90,9 @@ def _emit(line: str) -> None:
 def _resolve_api_key(explicit_key: str | None = None) -> str | None:
     return (
         explicit_key
-        or os.getenv("HF_TOKEN")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("GEMINI_API_KEY")
+        or HF_TOKEN
+        or OPENAI_API_KEY
+        or GEMINI_API_KEY
     )
 
 
@@ -340,9 +347,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the baseline policy against all crisis tasks.")
     parser.add_argument("--env-url", default=os.getenv("ENV_BASE_URL", DEFAULT_ENV_URL))
     parser.add_argument("--tasks", nargs="*", default=DEFAULT_TASKS)
-    parser.add_argument("--model", default=os.getenv("MODEL_NAME", DEFAULT_MODEL_NAME))
-    parser.add_argument("--api-base-url", default=os.getenv("API_BASE_URL", DEFAULT_API_BASE_URL))
-    parser.add_argument("--hf-token", default=os.getenv("HF_TOKEN"))
+    parser.add_argument("--model", default=MODEL_NAME)
+    parser.add_argument("--api-base-url", default=API_BASE_URL)
+    parser.add_argument("--hf-token", default=HF_TOKEN)
     parser.add_argument("--policy", choices=["auto", "scripted", "llm"], default="auto")
     parser.add_argument("--summary-json", action="store_true")
     args = parser.parse_args()
