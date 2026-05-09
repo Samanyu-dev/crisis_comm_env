@@ -40,5 +40,5 @@ export function useRealtimeSync() {
       window.clearInterval(poll);
       window.clearInterval(stream);
     };
-  }, [launched, refreshSnapshot, streamTick]);
+  }, [launched]); // Remove refreshSnapshot and streamTick from deps to prevent infinite loops
 }

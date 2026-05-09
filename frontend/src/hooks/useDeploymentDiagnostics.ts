@@ -37,6 +37,8 @@ export function useDeploymentDiagnostics(): DeploymentStatus {
   });
 
   useEffect(() => {
+    let mounted = true;
+
     const diagnostics = async (): Promise<void> => {
       const errors: string[] = [];
 
@@ -61,19 +63,21 @@ export function useDeploymentDiagnostics(): DeploymentStatus {
           headers: { "Content-Type": "application/json" }
         });
         
-        if (response.ok) {
+        if (response.ok && mounted) {
           const data = await response.json();
           log("info", "API health check passed:", data);
           setStatus((prev) => ({ ...prev, apiReachable: true }));
-        } else {
+        } else if (mounted) {
           const errorMsg = `API health check failed with status ${response.status}`;
           log("warn", errorMsg);
           errors.push(errorMsg);
         }
       } catch (error) {
-        const errorMsg = `API unreachable: ${error instanceof Error ? error.message : String(error)}`;
-        log("error", errorMsg);
-        errors.push(errorMsg);
+        if (mounted) {
+          const errorMsg = `API unreachable: ${error instanceof Error ? error.message : String(error)}`;
+          log("error", errorMsg);
+          errors.push(errorMsg);
+        }
       }
 
       // Check critical assets
@@ -98,8 +102,10 @@ export function useDeploymentDiagnostics(): DeploymentStatus {
           log("info", "All assets loaded successfully");
         }
       } catch (error) {
-        const errorMsg = `Asset check error: ${error instanceof Error ? error.message : String(error)}`;
-        log("warn", errorMsg);
+        if (mounted) {
+          const errorMsg = `Asset check error: ${error instanceof Error ? error.message : String(error)}`;
+          log("warn", errorMsg);
+        }
       }
 
       // Router diagnostics
@@ -108,15 +114,19 @@ export function useDeploymentDiagnostics(): DeploymentStatus {
         currentPath: window.location.hash || window.location.pathname
       });
 
-      if (errors.length > 0) {
+      if (errors.length > 0 && mounted) {
         log("warn", "Deployment diagnostics found issues:", errors);
         setStatus((prev) => ({ ...prev, errors }));
-      } else {
+      } else if (mounted) {
         log("info", "All deployment diagnostics passed");
       }
     };
 
     diagnostics();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return status;
