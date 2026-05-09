@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.responses import FileResponse
+from starlette.responses import FileResponse, Response
 from starlette.staticfiles import StaticFiles
 import uvicorn
 
@@ -59,7 +59,12 @@ def create_app() -> FastAPI:
     def root() -> Any:
         if frontend_index.exists():
             logger.info("Serving frontend index.html")
-            return FileResponse(frontend_index)
+            return FileResponse(
+                frontend_index,
+                headers={
+                    "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+                },
+            )
 
         standard_task_names = env.task_names(include_challenge=False)
         all_task_names = env.task_names(include_challenge=True)
@@ -117,8 +122,12 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Not found")
         if frontend_index.exists():
             logger.info(f"SPA fallback for path: /{full_path}")
-            return FileResponse(frontend_index)
-        raise HTTPException(status_code=404, detail=f"Path '{full_path}' not found")
+            return FileResponse(
+                frontend_index,
+                headers={
+                    "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+                },
+            )
         raise HTTPException(status_code=404, detail=f"Path '{full_path}' not found")
 
     return app
