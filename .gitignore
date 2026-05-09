@@ -8,3 +8,7 @@ __pycache__/
 .llm_judge_cache.json
 .DS_Store
 artifacts/rl_policy_challenge_s*.json
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+node_modules/
