@@ -327,15 +327,19 @@ def generate_action(
         if rl_policy is not None:
             return rl_policy.action(observation)
         return strategic_action_for_observation(observation)
+    # Tiered graceful fallback hierarchy
     if policy == "llm" and not api_key:
-        raise RuntimeError(
-            "LLM policy requires an API key. Set HF_TOKEN (recommended for HF Router), "
-            "OPENAI_API_KEY, GEMINI_API_KEY, or pass --api-key."
-        )
+        if rl_policy is not None:
+            return rl_policy.action(observation)
+        return strategic_action_for_observation(observation)
     if policy == "auto" and not api_key:
+        if rl_policy is not None:
+            return rl_policy.action(observation)
         return strategic_action_for_observation(observation)
     if not api_key:
-        return scripted_action_for_observation(observation)
+        if rl_policy is not None:
+            return rl_policy.action(observation)
+        return strategic_action_for_observation(observation)
 
     client = OpenAI(base_url=api_base_url, api_key=api_key, timeout=60.0)
     prompt = build_observation_prompt(observation)
@@ -351,8 +355,16 @@ def generate_action(
                         "role": "system",
                         "content": (
                             "You are a crisis communications lead in a high-stakes simulation. "
-                            "Return only JSON. Prioritize legal/regulatory deadlines, reject rumors, "
-                            "and keep statements consistent across audiences with concrete next steps."
+                            "Return ONLY valid JSON — no markdown, no explanation.\n\n"
+                            "SCORING RULES:\n"
+                            "1. FACTUAL ACCURACY (30%): Only state verified facts. Explicitly reject false facts. Include all required disclosures.\n"
+                            "2. AUDIENCE ALIGNMENT (20%): Regulators=formal, Employees=directive, Customers=empathetic, Press=controlled.\n"
+                            "3. TIMELINESS (15%): Notify urgent deadline audiences FIRST. Always notify regulators before press.\n"
+                            "4. CONSISTENCY (15%): Never contradict your prior statements. Check prior_statements.\n"
+                            "5. LEGAL SAFETY (10%): Avoid forbidden statements and vague hedging.\n"
+                            "6. PROACTIVE DISCLOSURE (10%): Volunteer what you do NOT yet know. Mention facts may evolve.\n\n"
+                            "AVOID PENALTIES: Never copy-paste identical messages across audiences, never repeat false facts, never leave audiences blank.\n\n"
+                            'Output exactly this JSON format: {"messages":{"regulators":"...","employees":"...","customers":"...","press":"..."},"internal_notes":"..."}'
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -374,7 +386,9 @@ def generate_action(
             last_error = exc
             has_next = idx < len(candidates) - 1
             if has_next and _is_quota_or_rate_error(exc):
-                time.sleep(1.0)
+                # Exponential backoff with jitter
+                backoff = min(2 ** idx * 0.2, 10.0)
+                time.sleep(backoff + __import__('random').uniform(0, 0.5))
                 continue
             if has_next:
                 continue

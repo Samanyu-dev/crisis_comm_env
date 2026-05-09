@@ -145,6 +145,21 @@ Observed outputs from grader probes:
 - `POST /step`
 - `GET /state`
 
+## Command center frontend
+
+This repository now includes a full React/Vite tactical dashboard UI at `frontend/` with:
+
+- Landing hero + animated command-center visuals
+- Responsive glassmorphism sidebar/navigation
+- Mission cards and scenario launcher
+- Split-screen simulation cockpit (details, live graph, intel feed)
+- Action controls wired to `/step` and `/reset`
+- Realtime terminal log stream with filtering
+- Recharts-based state visualizations and analytics
+- AI command assistant panel, threat map, multi-agent visualization, decision timeline, and replay
+
+When built (`frontend/dist`), FastAPI serves the SPA at `/` and keeps API endpoints unchanged.
+
 ## Project layout
 
 - [inference.py](inference.py): baseline runner with OpenAI-compatible client and required stdout logging
@@ -161,6 +176,10 @@ Observed outputs from grader probes:
 - [server/grader.py](server/grader.py): deterministic scoring and exploit checks
 - [server/state_manager.py](server/state_manager.py): episode memory and state transitions
 - [server/llm_judge.py](server/llm_judge.py): cached OpenAI-compatible audience judge with heuristic fallback
+- `frontend/src/components`: reusable UI panels and tactical widgets
+- `frontend/src/pages`: route-level views (`dashboard`, `missions`, `simulation`, `state`, `logs`, `analytics`, `settings`)
+- `frontend/src/services`: API client layer with caching/retry logic
+- `frontend/src/store`: centralized Zustand simulation state
 
 ## Setup
 
@@ -168,6 +187,13 @@ Observed outputs from grader probes:
 python3.10 -m venv venv
 source venv/bin/activate
 pip install -r server/requirements.txt
+```
+
+Frontend setup:
+
+```bash
+cd frontend
+npm install
 ```
 
 Environment variables:
@@ -183,10 +209,21 @@ Environment variables:
 
 ## Local run
 
+Backend:
+
 ```bash
 cd server
 uvicorn app:app --host 0.0.0.0 --port 7860
 ```
+
+Frontend (separate terminal):
+
+```bash
+cd frontend
+npm run dev
+```
+
+For integrated production-like behavior, run `npm run build` in `frontend/` and then start FastAPI. The built SPA is served at `/`.
 
 ## Docker
 
@@ -194,6 +231,16 @@ uvicorn app:app --host 0.0.0.0 --port 7860
 docker build -t crisis-comm-local .
 docker run -p 7860:7860 crisis-comm-local
 ```
+
+The root Dockerfile now builds the frontend and bundles `frontend/dist` into the FastAPI image for Hugging Face Spaces deployment.
+
+## Vercel / Netlify (frontend-only option)
+
+You can deploy only `frontend/` to Vercel or Netlify and point it to a hosted backend:
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Env variable: `VITE_API_BASE_URL=https://your-backend-url`
 
 ## Baseline inference
 

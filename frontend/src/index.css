@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: rgba(148, 163, 184, 0.25);
+}
+
+body {
+  @apply bg-background text-foreground font-display antialiased;
+  min-height: 100vh;
+  margin: 0;
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(50, 211, 255, 0.14) 0%, transparent 26%),
+    radial-gradient(circle at 80% 10%, rgba(140, 92, 246, 0.18) 0%, transparent 34%),
+    radial-gradient(circle at 80% 85%, rgba(30, 110, 255, 0.12) 0%, transparent 30%),
+    linear-gradient(145deg, #02040a 0%, #050a15 45%, #080d1f 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.glass-panel {
+  background: linear-gradient(
+    130deg,
+    rgba(9, 16, 32, 0.68) 10%,
+    rgba(8, 13, 27, 0.54) 45%,
+    rgba(8, 13, 27, 0.44) 100%
+  );
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(71, 116, 190, 0.32);
+}
+
+.neon-border {
+  box-shadow:
+    inset 0 0 0 1px rgba(59, 187, 255, 0.18),
+    0 0 22px rgba(59, 187, 255, 0.2);
+}
+
+.cyber-grid {
+  background-image: theme("backgroundImage.cyber-grid");
+  background-size: 32px 32px;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 85%);
+}
+
+.shimmer {
+  background: linear-gradient(110deg, rgba(255, 255, 255, 0.04) 8%, rgba(255, 255, 255, 0.12) 18%, rgba(255, 255, 255, 0.04) 33%);
+  background-size: 800px 100%;
+  animation: shimmer 2.2s linear infinite;
+}
+
+.log-scanline {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.02),
+    rgba(255, 255, 255, 0.02) 1px,
+    rgba(0, 0, 0, 0.06) 2px,
+    rgba(0, 0, 0, 0.06) 4px
+  );
+}
+
+.radar-ring {
+  border: 1px solid rgba(50, 211, 255, 0.22);
+  border-radius: 9999px;
+}
+
+.matrix-column {
+  position: absolute;
+  top: -100%;
+  color: rgba(16, 185, 129, 0.2);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  animation: matrixDrift linear infinite;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0.4), rgba(59, 130, 246, 0.5));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.42);
+}

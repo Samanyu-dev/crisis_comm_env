@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 import uvicorn
 
 from environment import CrisisCommunicationEnv
@@ -29,9 +32,18 @@ def create_app() -> FastAPI:
         version="0.1.0",
     )
     env = CrisisCommunicationEnv()
+    frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    frontend_index = frontend_dist / "index.html"
+    frontend_assets = frontend_dist / "assets"
+
+    if frontend_assets.exists():
+        app.mount("/assets", StaticFiles(directory=frontend_assets), name="assets")
 
     @app.get("/")
-    def root() -> dict[str, Any]:
+    def root() -> Any:
+        if frontend_index.exists():
+            return FileResponse(frontend_index)
+
         standard_task_names = env.task_names(include_challenge=False)
         all_task_names = env.task_names(include_challenge=True)
         return {
@@ -79,6 +91,14 @@ def create_app() -> FastAPI:
     @app.get("/state")
     def state() -> dict[str, Any]:
         return env.state()
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str) -> Any:
+        if full_path.startswith(("health", "tasks", "reset", "step", "state")):
+            raise HTTPException(status_code=404, detail="Not found")
+        if frontend_index.exists():
+            return FileResponse(frontend_index)
+        raise HTTPException(status_code=404, detail=f"Path '{full_path}' not found")
 
     return app
 
