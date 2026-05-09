@@ -1,27 +1,37 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { useSimulationStore } from "@/store/simulationStore";
 
 export function useRealtimeSync() {
-  const {
-    bootstrapped,
-    initialize,
-    launched,
-    refreshSnapshot,
-    streamTick
-  } = useSimulationStore((state) => ({
-    bootstrapped: state.bootstrapped,
-    initialize: state.initialize,
-    launched: state.launched,
-    refreshSnapshot: state.refreshSnapshot,
-    streamTick: state.streamTick
-  }));
+  const bootstrapped = useSimulationStore((state) => state.bootstrapped);
+  const launched = useSimulationStore((state) => state.launched);
+  const initialize = useSimulationStore((state) => state.initialize);
+  const refreshSnapshot = useSimulationStore((state) => state.refreshSnapshot);
+  const streamTick = useSimulationStore((state) => state.streamTick);
+
+  const initializeRef = useRef(initialize);
+  const refreshSnapshotRef = useRef(refreshSnapshot);
+  const streamTickRef = useRef(streamTick);
 
   useEffect(() => {
-    if (!bootstrapped) {
-      void initialize();
+    initializeRef.current = initialize;
+  }, [initialize]);
+
+  useEffect(() => {
+    refreshSnapshotRef.current = refreshSnapshot;
+  }, [refreshSnapshot]);
+
+  useEffect(() => {
+    streamTickRef.current = streamTick;
+  }, [streamTick]);
+
+  useEffect(() => {
+    if (bootstrapped) {
+      return;
     }
-  }, [bootstrapped, initialize]);
+
+    void initializeRef.current();
+  }, [bootstrapped]);
 
   useEffect(() => {
     if (!launched) {
@@ -29,16 +39,16 @@ export function useRealtimeSync() {
     }
 
     const poll = window.setInterval(() => {
-      void refreshSnapshot();
+      void refreshSnapshotRef.current();
     }, 9000);
 
     const stream = window.setInterval(() => {
-      streamTick();
+      streamTickRef.current();
     }, 3200);
 
     return () => {
       window.clearInterval(poll);
       window.clearInterval(stream);
     };
-  }, [launched]); // Remove refreshSnapshot and streamTick from deps to prevent infinite loops
+  }, [launched]);
 }
