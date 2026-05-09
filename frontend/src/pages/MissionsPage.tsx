@@ -28,7 +28,7 @@ export function MissionsPage() {
           ? Math.min(100, (currentState.turn / currentState.max_turns) * 100)
           : 0;
 
-      const status = currentState?.done && active ? "completed" : active ? "active" : "ready";
+      const status: "ready" | "active" | "completed" = currentState?.done && active ? "completed" : active ? "active" : "ready";
       return { task, progress, status };
     });
   }, [tasks, currentState, selectedTask]);
