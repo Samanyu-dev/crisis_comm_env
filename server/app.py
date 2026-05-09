@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,13 @@ from starlette.staticfiles import StaticFiles
 import uvicorn
 
 from environment import CrisisCommunicationEnv
+
+# Configure logging for production debugging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
 class ResetRequest(BaseModel):
@@ -36,16 +44,26 @@ def create_app() -> FastAPI:
     frontend_index = frontend_dist / "index.html"
     frontend_assets = frontend_dist / "assets"
 
+    logger.info(f"Initializing FastAPI app")
+    logger.info(f"Frontend dist path: {frontend_dist}")
+    logger.info(f"Frontend assets exist: {frontend_assets.exists()}")
+    logger.info(f"Frontend index exists: {frontend_index.exists()}")
+
     if frontend_assets.exists():
         app.mount("/assets", StaticFiles(directory=frontend_assets), name="assets")
+        logger.info("Mounted /assets static files")
+    else:
+        logger.warning("Frontend assets directory not found")
 
     @app.get("/")
     def root() -> Any:
         if frontend_index.exists():
+            logger.info("Serving frontend index.html")
             return FileResponse(frontend_index)
 
         standard_task_names = env.task_names(include_challenge=False)
         all_task_names = env.task_names(include_challenge=True)
+        logger.info(f"Frontend not built, returning API info")
         return {
             "name": "crisis-command",
             "status": "ok",
@@ -71,6 +89,7 @@ def create_app() -> FastAPI:
     @app.post("/reset")
     def reset(request: ResetRequest | None = None) -> dict[str, Any]:
         task_name = request.task_name if request else None
+        logger.info(f"Resetting simulation with task: {task_name}")
         observation = env.reset(task_name)
         return {
             "observation": observation.model_dump(),
@@ -97,7 +116,9 @@ def create_app() -> FastAPI:
         if full_path.startswith(("health", "tasks", "reset", "step", "state")):
             raise HTTPException(status_code=404, detail="Not found")
         if frontend_index.exists():
+            logger.info(f"SPA fallback for path: /{full_path}")
             return FileResponse(frontend_index)
+        raise HTTPException(status_code=404, detail=f"Path '{full_path}' not found")
         raise HTTPException(status_code=404, detail=f"Path '{full_path}' not found")
 
     return app
@@ -107,7 +128,8 @@ app = create_app()
 
 
 def main() -> None:
-    uvicorn.run("app:app", host="0.0.0.0", port=7860)
+    logger.info("Starting Crisis Communication Environment server on 0.0.0.0:7860")
+    uvicorn.run("app:app", host="0.0.0.0", port=7860, log_level="info")
 
 
 if __name__ == "__main__":

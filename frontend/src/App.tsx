@@ -6,6 +6,7 @@ import { CommandLayout } from "@/components/layout/CommandLayout";
 import { Toaster } from "@/components/ui/toaster";
 import { useRealtimeSync } from "@/hooks/useRealtimeSync";
 import { useToast } from "@/hooks/useToast";
+import { useDeploymentDiagnostics } from "@/hooks/useDeploymentDiagnostics";
 import { pageTransition } from "@/animations/motionPresets";
 import { useSimulationStore } from "@/store/simulationStore";
 
@@ -46,6 +47,7 @@ export default function App() {
   }));
 
   useRealtimeSync();
+  useDeploymentDiagnostics();
 
   useEffect(() => {
     if (!error) {

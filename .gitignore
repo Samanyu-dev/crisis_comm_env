@@ -11,4 +11,10 @@ artifacts/rl_policy_challenge_s*.json
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
+frontend/.vite/
 node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+frontend/node_modules/

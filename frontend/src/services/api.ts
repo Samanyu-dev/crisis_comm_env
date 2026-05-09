@@ -11,6 +11,13 @@ import {
 } from "@/types/api";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const isDev = import.meta.env.DEV;
+
+// Log API initialization
+console.log("[Crisis-Comm] Initializing API service", {
+  baseURL: API_BASE_URL || "(relative)",
+  isDev
+});
 
 const api: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -19,6 +26,25 @@ const api: AxiosInstance = axios.create({
     "Content-Type": "application/json"
   }
 });
+
+// Add response interceptor for logging
+api.interceptors.response.use(
+  (response) => {
+    if (!isDev) {
+      console.log(`[Crisis-Comm] API ${response.config.method?.toUpperCase()} ${response.config.url}: ${response.status}`);
+    }
+    return response;
+  },
+  (error) => {
+    console.error("[Crisis-Comm] API Error", {
+      method: error.config?.method?.toUpperCase(),
+      url: error.config?.url,
+      status: error.response?.status,
+      message: error.message
+    });
+    return Promise.reject(error);
+  }
+);
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
