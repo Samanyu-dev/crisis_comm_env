@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useShallow } from "zustand/shallow";
 
 import { CommandLayout } from "@/components/layout/CommandLayout";
 import { Toaster } from "@/components/ui/toaster";
@@ -41,10 +42,12 @@ function AnimatedPage({ children }: { children: ReactNode }) {
 export default function App() {
   const location = useLocation();
   const { toast } = useToast();
-  const { error, clearError } = useSimulationStore((state) => ({
-    error: state.error,
-    clearError: state.clearError
-  }));
+  const { error, clearError } = useSimulationStore(
+    useShallow((state) => ({
+      error: state.error,
+      clearError: state.clearError
+    }))
+  );
 
   useRealtimeSync();
   useDeploymentDiagnostics();

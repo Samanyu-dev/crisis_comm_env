@@ -1,4 +1,5 @@
 import { Gauge, Radar, ShieldAlert, Timer } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { StateCharts } from "@/components/visuals/StateCharts";
@@ -7,11 +8,13 @@ import { Progress } from "@/components/ui/progress";
 import { useSimulationStore } from "@/store/simulationStore";
 
 export function StatePage() {
-  const { currentState, chartSeries, threatSeverity } = useSimulationStore((state) => ({
-    currentState: state.currentState,
-    chartSeries: state.chartSeries,
-    threatSeverity: state.threatSeverity
-  }));
+  const { currentState, chartSeries, threatSeverity } = useSimulationStore(
+    useShallow((state) => ({
+      currentState: state.currentState,
+      chartSeries: state.chartSeries,
+      threatSeverity: state.threatSeverity
+    }))
+  );
 
   const completion = currentState ? (currentState.turn / currentState.max_turns) * 100 : 0;
   const pending = Object.keys(currentState?.pending_deadlines ?? {}).length;

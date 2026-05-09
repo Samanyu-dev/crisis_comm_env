@@ -1,15 +1,18 @@
 import { Activity, BellRing, HeartPulse, ShieldCheck } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { Badge } from "@/components/ui/badge";
 import { useSimulationStore } from "@/store/simulationStore";
 
 export function TopBar() {
-  const { health, currentState, threatSeverity, tasks } = useSimulationStore((state) => ({
-    health: state.health,
-    currentState: state.currentState,
-    threatSeverity: state.threatSeverity,
-    tasks: state.tasks
-  }));
+  const { health, currentState, threatSeverity, tasks } = useSimulationStore(
+    useShallow((state) => ({
+      health: state.health,
+      currentState: state.currentState,
+      threatSeverity: state.threatSeverity,
+      tasks: state.tasks
+    }))
+  );
 
   const activeScenarioCount = tasks.length;
   const completed = currentState?.done ? 1 : 0;

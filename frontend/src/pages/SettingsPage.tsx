@@ -1,4 +1,5 @@
 import { MonitorCog, Music2, RefreshCcw, Sparkle } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { Button } from "@/components/ui/button";
@@ -13,13 +14,15 @@ export function SettingsPage() {
     toggleSound,
     toggleMatrix,
     initialize
-  } = useSimulationStore((state) => ({
-    soundEnabled: state.soundEnabled,
-    matrixEnabled: state.matrixEnabled,
-    toggleSound: state.toggleSound,
-    toggleMatrix: state.toggleMatrix,
-    initialize: state.initialize
-  }));
+  } = useSimulationStore(
+    useShallow((state) => ({
+      soundEnabled: state.soundEnabled,
+      matrixEnabled: state.matrixEnabled,
+      toggleSound: state.toggleSound,
+      toggleMatrix: state.toggleMatrix,
+      initialize: state.initialize
+    }))
+  );
 
   return (
     <div className="space-y-4">

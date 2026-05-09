@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { cn } from "@/lib/utils";
 import { useToastStore } from "@/hooks/useToast";
@@ -19,10 +20,12 @@ function ToneIcon({ tone = "default" }: { tone?: "default" | "success" | "warnin
 }
 
 export function Toaster() {
-  const { toasts, remove } = useToastStore((state) => ({
-    toasts: state.toasts,
-    remove: state.remove
-  }));
+  const { toasts, remove } = useToastStore(
+    useShallow((state) => ({
+      toasts: state.toasts,
+      remove: state.remove
+    }))
+  );
 
   return (
     <div className="pointer-events-none fixed right-3 top-3 z-[120] flex w-[min(380px,95vw)] flex-col gap-2">

@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { BarChart3, ShieldCheck, Timer } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useShallow } from "zustand/shallow";
 
 import { HeroSection } from "@/components/landing/HeroSection";
 import { useSimulationStore } from "@/store/simulationStore";
@@ -8,12 +9,14 @@ import { fadeInUp, staggerChildren } from "@/animations/motionPresets";
 
 export function LandingPage() {
   const navigate = useNavigate();
-  const { tasks, health, lastReward, launchSimulation } = useSimulationStore((state) => ({
-    tasks: state.tasks,
-    health: state.health,
-    lastReward: state.lastReward,
-    launchSimulation: state.launchSimulation
-  }));
+  const { tasks, health, lastReward, launchSimulation } = useSimulationStore(
+    useShallow((state) => ({
+      tasks: state.tasks,
+      health: state.health,
+      lastReward: state.lastReward,
+      launchSimulation: state.launchSimulation
+    }))
+  );
 
   return (
     <div className="relative mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8 md:py-10">

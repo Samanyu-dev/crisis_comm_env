@@ -7,17 +7,20 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { useShallow } from "zustand/shallow";
 
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { ThreatMap } from "@/components/visuals/ThreatMap";
 import { useSimulationStore } from "@/store/simulationStore";
 
 export function AnalyticsPage() {
-  const { chartSeries, timeline, threatSeverity } = useSimulationStore((state) => ({
-    chartSeries: state.chartSeries,
-    timeline: state.timeline,
-    threatSeverity: state.threatSeverity
-  }));
+  const { chartSeries, timeline, threatSeverity } = useSimulationStore(
+    useShallow((state) => ({
+      chartSeries: state.chartSeries,
+      timeline: state.timeline,
+      threatSeverity: state.threatSeverity
+    }))
+  );
 
   const rewardData = timeline.map((entry, index) => ({
     step: index + 1,

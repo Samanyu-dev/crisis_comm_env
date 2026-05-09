@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { ArrowRightCircle, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useShallow } from "zustand/shallow";
 
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { ActionBar } from "@/components/simulation/ActionBar";
@@ -33,23 +34,25 @@ export function SimulationPage() {
     dismissCompletionOverlay,
     assistantMessages,
     pushAssistantPrompt
-  } = useSimulationStore((state) => ({
-    currentState: state.currentState,
-    currentObservation: state.currentObservation,
-    logs: state.logs,
-    lastReward: state.lastReward,
-    threatSeverity: state.threatSeverity,
-    stepLoading: state.stepLoading,
-    resetLoading: state.resetLoading,
-    completionOverlayVisible: state.completionOverlayVisible,
-    agents: state.agents,
-    timeline: state.timeline,
-    executeAction: state.executeAction,
-    resetCurrentScenario: state.resetCurrentScenario,
-    dismissCompletionOverlay: state.dismissCompletionOverlay,
-    assistantMessages: state.assistantMessages,
-    pushAssistantPrompt: state.pushAssistantPrompt
-  }));
+  } = useSimulationStore(
+    useShallow((state) => ({
+      currentState: state.currentState,
+      currentObservation: state.currentObservation,
+      logs: state.logs,
+      lastReward: state.lastReward,
+      threatSeverity: state.threatSeverity,
+      stepLoading: state.stepLoading,
+      resetLoading: state.resetLoading,
+      completionOverlayVisible: state.completionOverlayVisible,
+      agents: state.agents,
+      timeline: state.timeline,
+      executeAction: state.executeAction,
+      resetCurrentScenario: state.resetCurrentScenario,
+      dismissCompletionOverlay: state.dismissCompletionOverlay,
+      assistantMessages: state.assistantMessages,
+      pushAssistantPrompt: state.pushAssistantPrompt
+    }))
+  );
 
   const missionTitle = useMemo(
     () => (currentState?.scenario_name ? currentState.scenario_name.replace(/-/g, " ") : "No mission active"),

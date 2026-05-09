@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useShallow } from "zustand/shallow";
 
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { SkeletonCard } from "@/components/common/SkeletonCard";
@@ -12,13 +13,15 @@ import { useSimulationStore } from "@/store/simulationStore";
 export function MissionsPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { tasks, currentState, selectedTask, resetLoading, startScenario } = useSimulationStore((state) => ({
-    tasks: state.tasks,
-    currentState: state.currentState,
-    selectedTask: state.selectedTask,
-    resetLoading: state.resetLoading,
-    startScenario: state.startScenario
-  }));
+  const { tasks, currentState, selectedTask, resetLoading, startScenario } = useSimulationStore(
+    useShallow((state) => ({
+      tasks: state.tasks,
+      currentState: state.currentState,
+      selectedTask: state.selectedTask,
+      resetLoading: state.resetLoading,
+      startScenario: state.startScenario
+    }))
+  );
 
   const scenarios = useMemo(() => {
     return tasks.map((task) => {

@@ -6,6 +6,7 @@ import {
   ListChecks,
   TrendingUp
 } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
 import { MetricsOverview } from "@/components/dashboard/MetricsOverview";
 import { SectionHeader } from "@/components/common/SectionHeader";
@@ -24,16 +25,18 @@ export function DashboardPage() {
     chartSeries,
     assistantMessages,
     pushAssistantPrompt
-  } = useSimulationStore((state) => ({
-    health: state.health,
-    tasks: state.tasks,
-    currentState: state.currentState,
-    threatSeverity: state.threatSeverity,
-    lastReward: state.lastReward,
-    chartSeries: state.chartSeries,
-    assistantMessages: state.assistantMessages,
-    pushAssistantPrompt: state.pushAssistantPrompt
-  }));
+  } = useSimulationStore(
+    useShallow((state) => ({
+      health: state.health,
+      tasks: state.tasks,
+      currentState: state.currentState,
+      threatSeverity: state.threatSeverity,
+      lastReward: state.lastReward,
+      chartSeries: state.chartSeries,
+      assistantMessages: state.assistantMessages,
+      pushAssistantPrompt: state.pushAssistantPrompt
+    }))
+  );
 
   const latestTrend = chartSeries.slice(-7).map((point) => point.threat);
   const sentimentTrend = chartSeries.slice(-7).map((point) => point.sentiment);
